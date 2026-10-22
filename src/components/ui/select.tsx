@@ -5,7 +5,8 @@ export const Select = SelectPrimitive.Root;
 export const SelectTrigger = ({ className, ...props }: SelectPrimitive.SelectTriggerProps) => (
   <SelectPrimitive.Trigger
     className={cn(
-      "flex h-9 w-full items-center justify-between rounded-md border bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
+      "flex h-9 w-full items-center justify-between rounded-md border bg-transparent px-3 text-sm",
+      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
       className,
     )}
     {...props}
@@ -30,7 +31,8 @@ export const SelectContent = ({
 export const SelectItem = ({ className, children, ...props }: SelectPrimitive.SelectItemProps) => (
   <SelectPrimitive.Item
     className={cn(
-      "relative flex cursor-pointer select-none items-center rounded py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-[var(--muted)]",
+      "relative flex cursor-pointer select-none items-center rounded py-1.5 pl-8 pr-2 text-sm",
+      "outline-none focus:bg-[var(--muted)]",
       className,
     )}
     {...props}
