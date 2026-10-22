@@ -1,6 +1,6 @@
 import { http, HttpResponse } from "msw";
 import {
-  accounts,
+  accounts as accountFixtures,
   instruments,
   portfolio,
   strategies,
@@ -10,6 +10,23 @@ import {
 
 const api = "http://localhost:8000";
 const replay = new Map<string, { body: string; response: unknown }>();
+const STORE_KEY = "laniakea.mocks.accounts";
+// MSW handlers run in the page, so in-memory state would vanish on reload; keep it in
+// sessionStorage (cleared by POST /__mocks/reset).
+type MockAccount = (typeof accountFixtures)[number];
+function loadAccounts(): MockAccount[] {
+  if (typeof sessionStorage === "undefined") return structuredClone(accountFixtures);
+  const saved = sessionStorage.getItem(STORE_KEY);
+  return saved ? (JSON.parse(saved) as MockAccount[]) : structuredClone(accountFixtures);
+}
+function saveAccounts(): void {
+  if (typeof sessionStorage !== "undefined")
+    sessionStorage.setItem(STORE_KEY, JSON.stringify(accounts));
+}
+let accounts = loadAccounts();
+let nextAccountId = Math.max(20, ...accounts.map((item) => item.id + 1));
+const verificationPolls = new Map<number, number>();
+const balancePolls = new Map<number, number>();
 const list = <T>(results: T[]) => ({ results, next: null, count: results.length });
 const command = {
   id: 77,
@@ -23,6 +40,13 @@ function error(code: string, message: string, status: number) {
 }
 export function resetIdempotency(): void {
   replay.clear();
+}
+export function resetAccountMocks(): void {
+  accounts = structuredClone(accountFixtures);
+  nextAccountId = 20;
+  if (typeof sessionStorage !== "undefined") sessionStorage.removeItem(STORE_KEY);
+  verificationPolls.clear();
+  balancePolls.clear();
 }
 export async function idempotent(
   request: Request,
@@ -40,6 +64,14 @@ export async function idempotent(
 }
 
 export const handlers = [
+  http.post(`${api}/__mocks/reset`, () => {
+    resetAccountMocks();
+    resetIdempotency();
+    return new HttpResponse(null, {
+      status: 204,
+      headers: { "Access-Control-Allow-Origin": "*" },
+    });
+  }),
   http.post(`${api}/api/jwt/create/`, async ({ request }) => {
     const body = (await request.json()) as { email?: string; password?: string };
     return body.password === "demo"
@@ -75,21 +107,125 @@ export const handlers = [
   http.get(`${api}/api/engine/v1/strategies/:family/:name/versions/:version/`, () =>
     HttpResponse.json(strategies[0]),
   ),
-  http.get(`${api}/api/engine/v1/accounts/`, () => HttpResponse.json(accounts)),
-  http.get(`${api}/api/engine/v1/accounts/:id/`, ({ params }) =>
-    HttpResponse.json(accounts.find((item) => item.id === Number(params.id)) ?? accounts[0]),
-  ),
-  http.get(`${api}/api/engine/v1/accounts/:id/balance/`, () =>
-    HttpResponse.json({ balances: [], as_of: "2026-10-22T10:00:00Z", pending: false, error: null }),
-  ),
-  http.post(`${api}/api/engine/v1/accounts/:id/verify/`, () =>
-    HttpResponse.json({ ...accounts[0], verification_pending: true }, { status: 202 }),
-  ),
-  http.post(`${api}/api/engine/v1/accounts/`, () =>
-    HttpResponse.json(accounts[0], { status: 201 }),
-  ),
-  http.patch(`${api}/api/engine/v1/accounts/:id/`, () => HttpResponse.json(accounts[0])),
-  http.delete(`${api}/api/engine/v1/accounts/:id/`, () => new HttpResponse(null, { status: 204 })),
+  http.get(`${api}/api/engine/v1/accounts/`, () => HttpResponse.json(list(accounts))),
+  http.get(`${api}/api/engine/v1/accounts/:id/`, ({ params }) => {
+    const id = Number(params.id);
+    const account = accounts.find((item) => item.id === id);
+    if (!account) return error("not_found", "Account not found.", 404);
+    const polls = verificationPolls.get(id) ?? 0;
+    if (account.verification_pending && polls >= 1) {
+      account.verification_pending = false;
+      const invalid = account.label.toLowerCase().includes("withdraw");
+      account.status = invalid ? "invalid" : "verified";
+      account.permissions = invalid
+        ? { trade: true, withdraw: true }
+        : { trade: true, withdraw: false };
+      account.probe_error = invalid ? "key can withdraw: create a trade-only key" : "";
+    }
+    verificationPolls.set(id, polls + 1);
+    saveAccounts();
+    return HttpResponse.json(account);
+  }),
+  http.get(`${api}/api/engine/v1/accounts/:id/balance/`, ({ params }) => {
+    const id = Number(params.id);
+    const polls = balancePolls.get(id) ?? 0;
+    balancePolls.set(id, polls + 1);
+    const probeError = accounts.find((item) => item.id === id)?.probe_error ?? "";
+    if (probeError && polls > 0)
+      return HttpResponse.json({ balances: [], as_of: null, pending: false, error: probeError });
+    return HttpResponse.json(
+      polls === 0
+        ? { balances: [], as_of: null, pending: true, error: "" }
+        : {
+            balances: [{ currency: "USDT", total: "100.00", free: "75.00" }],
+            as_of: "2026-10-22T10:00:00Z",
+            pending: false,
+            error: "",
+          },
+    );
+  }),
+  http.post(`${api}/api/engine/v1/accounts/:id/verify/`, ({ params }) => {
+    const account = accounts.find((item) => item.id === Number(params.id));
+    if (!account) return error("not_found", "Account not found.", 404);
+    account.verification_pending = true;
+    verificationPolls.set(account.id, 0);
+    saveAccounts();
+    return HttpResponse.json(account, { status: 202 });
+  }),
+  http.post(`${api}/api/engine/v1/accounts/`, async ({ request }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    const venue = venues.find((item) => item.id === body.venue);
+    const credentials = body.credentials as Record<string, unknown> | undefined;
+    if (
+      !venue ||
+      !credentials ||
+      venue.credential_fields.some((field) => !credentials[field.name])
+    ) {
+      return HttpResponse.json(
+        {
+          error: {
+            code: "validation_error",
+            message: "Invalid request.",
+            fields: { credentials: ["Credentials do not match this venue."] },
+            reasons: [],
+          },
+        },
+        { status: 400 },
+      );
+    }
+    const account = {
+      id: nextAccountId++,
+      venue: venue.id,
+      label: String(body.label ?? "New account"),
+      is_testnet: body.is_testnet === true,
+      status: "unverified" as const,
+      verified_at: null,
+      permissions: {},
+      credentials_set: true,
+      credential_hint: "…1234",
+      risk: {
+        daily_loss_limit: null,
+        max_drawdown_pct: null,
+        breaker_policy: "cancel_orders" as const,
+      },
+      kill_switch: { active: false },
+      systems_count: 0,
+      created_at: "2026-10-22T18:51:03.220524Z",
+      verification_pending: false,
+      probe_error: "",
+    };
+    accounts.push(account);
+    saveAccounts();
+    return HttpResponse.json(account, { status: 201 });
+  }),
+  http.patch(`${api}/api/engine/v1/accounts/:id/`, async ({ params, request }) => {
+    const account = accounts.find((item) => item.id === Number(params.id));
+    if (!account) return error("not_found", "Account not found.", 404);
+    const body = (await request.json()) as Record<string, unknown>;
+    if (typeof body.label === "string") account.label = body.label;
+    if ("daily_loss_limit" in body)
+      account.risk.daily_loss_limit = body.daily_loss_limit as string | null;
+    if ("max_drawdown_pct" in body)
+      account.risk.max_drawdown_pct = body.max_drawdown_pct as number | null;
+    if (body.breaker_policy === "cancel_orders" || body.breaker_policy === "flatten")
+      account.risk.breaker_policy = body.breaker_policy;
+    if (body.credentials) {
+      account.status = "unverified";
+      account.verification_pending = false;
+    }
+    saveAccounts();
+    return HttpResponse.json(account);
+  }),
+  http.delete(`${api}/api/engine/v1/accounts/:id/`, ({ params }) => {
+    const id = Number(params.id);
+    const account = accounts.find((item) => item.id === id);
+    if (!account) return error("not_found", "Account not found.", 404);
+    if (account.systems_count > 0)
+      return error("conflict", `Account is used by ${account.systems_count} trading systems.`, 409);
+    accounts = accounts.filter((item) => item.id !== id);
+    saveAccounts();
+    return new HttpResponse(null, { status: 204 });
+  }),
   http.get(`${api}/api/engine/v1/portfolio/summary/`, ({ request }) => {
     // SPEC §7.4: live and paper are never summed together; the summary is per mode.
     const mode = new URL(request.url).searchParams.get("mode") ?? "live";

@@ -4,7 +4,6 @@ import { useParams } from "next/navigation";
 import { useMode } from "@/components/app-shell";
 import { DataProof } from "@/components/data-proof";
 import {
-  useAccount,
   useAccounts,
   useBacktest,
   useBacktests,
@@ -17,7 +16,6 @@ import {
   useStrategy,
   useSystem,
   useSystems,
-  useVenues,
 } from "@/lib/api/queries";
 
 export function PortfolioProof() {
@@ -51,23 +49,6 @@ export function StrategyProof() {
   const params = useParams<{ key: string }>();
   const query = useStrategy(params.key);
   return <DataProof {...query}>{query.data?.title}</DataProof>;
-}
-export function AccountsProof() {
-  const query = useAccounts();
-  return <DataProof {...query}>{query.data?.results?.length ?? 0} accounts</DataProof>;
-}
-export function AccountProof() {
-  const params = useParams<{ id: string }>();
-  const query = useAccount(Number(params.id));
-  return (
-    <DataProof {...query}>
-      {query.data ? `${query.data.label} · ${query.data.status}` : null}
-    </DataProof>
-  );
-}
-export function VenuesProof() {
-  const query = useVenues();
-  return <DataProof {...query}>{query.data?.results?.length ?? 0} venues</DataProof>;
 }
 export function NewSystemProof() {
   const strategy = useStrategies();

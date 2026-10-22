@@ -1,10 +1,5 @@
-import { PlaceholderPage } from "@/components/placeholder-page";
-import { AccountProof } from "@/components/page-wiring";
-export default async function AccountPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  return (
-    <PlaceholderPage title={`Account #${id}`}>
-      <AccountProof />
-    </PlaceholderPage>
-  );
+import { AccountDetailPage } from "@/components/accounts-pages";
+
+export default function Page() {
+  return <AccountDetailPage />;
 }

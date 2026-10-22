@@ -1,11 +1,13 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useRef } from "react";
 import { api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/keys";
 import { strategyApiPath } from "@/lib/api/strategy";
 import type {
   Account,
+  AccountBalance,
   Backtest,
   Instrument,
   KillSwitch,
@@ -84,10 +86,26 @@ export function useAccounts() {
       list(await api.get<Account[] | PaginatedList<Account>>("/api/engine/v1/accounts/")),
   });
 }
-export function useAccount(id: number) {
+export function useAccount(id: number, options: { pollWhilePending?: boolean } = {}) {
   return useQuery({
     queryKey: queryKeys.account(id),
     queryFn: () => api.get<Account>(`/api/engine/v1/accounts/${id}/`),
+    refetchInterval: (query) =>
+      options.pollWhilePending && query.state.data?.verification_pending ? 2_000 : false,
+  });
+}
+export function useAccountBalance(id: number, options: { enabled?: boolean } = {}) {
+  const startedAt = useRef<number | null>(null);
+  return useQuery({
+    queryKey: queryKeys.accountBalance(id),
+    queryFn: () => api.get<AccountBalance>(`/api/engine/v1/accounts/${id}/balance/`),
+    enabled: options.enabled ?? true,
+    refetchInterval: (query) => {
+      if (!query.state.data?.pending) return false;
+      const started = startedAt.current ?? Date.now();
+      startedAt.current = started;
+      return Date.now() - started < 30_000 ? 2_000 : false;
+    },
   });
 }
 export function useVenues() {

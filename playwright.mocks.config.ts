@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: "mocks.spec.ts",
+  testMatch: "**/*.mocks.spec.ts",
   workers: 1,
   use: { baseURL: "http://localhost:3002", headless: true },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],

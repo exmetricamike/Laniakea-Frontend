@@ -1,9 +1,5 @@
-import { PlaceholderPage } from "@/components/placeholder-page";
-import { VenuesProof } from "@/components/page-wiring";
-export default function NewAccountPage() {
-  return (
-    <PlaceholderPage title="New account">
-      <VenuesProof />
-    </PlaceholderPage>
-  );
+import { NewAccountPage } from "@/components/accounts-pages";
+
+export default function Page() {
+  return <NewAccountPage />;
 }

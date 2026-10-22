@@ -8,6 +8,17 @@ export const venues: Venue[] = [
     has_testnet: true,
     credential_fields: [{ name: "api_key", label: "API key", secret: false }],
   },
+  {
+    id: "okx",
+    name: "OKX",
+    kinds: ["spot", "linear_perp"],
+    has_testnet: true,
+    credential_fields: [
+      { name: "api_key", label: "API key", secret: false },
+      { name: "api_secret", label: "API secret", secret: true },
+      { name: "passphrase", label: "Passphrase", secret: true },
+    ],
+  },
 ];
 export const instruments: Instrument[] = [
   {
@@ -66,8 +77,8 @@ export const accounts: Account[] = [
     permissions: { trade: true, withdraw: false },
     credentials_set: true,
     credential_hint: "…k9Qz",
-    risk: {},
-    kill_switch: {},
+    risk: { daily_loss_limit: null, max_drawdown_pct: null, breaker_policy: "cancel_orders" },
+    kill_switch: { active: false },
     systems_count: 1,
     verification_pending: false,
     probe_error: "",
@@ -80,11 +91,11 @@ export const accounts: Account[] = [
     is_testnet: false,
     status: "invalid",
     verified_at: null,
-    permissions: null,
+    permissions: { trade: false, withdraw: true },
     credentials_set: true,
     credential_hint: "…d4Cc",
-    risk: {},
-    kill_switch: {},
+    risk: { daily_loss_limit: null, max_drawdown_pct: null, breaker_policy: "cancel_orders" },
+    kill_switch: { active: true },
     systems_count: 0,
     verification_pending: false,
     probe_error: "Invalid credentials",

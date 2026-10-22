@@ -23,14 +23,53 @@ async function mockMe(page: Page, isStaff = true) {
       body: JSON.stringify({ ...staff, is_staff: isStaff }),
     }),
   );
-  await page.route("**/api/engine/v1/**", (route) =>
-    route.fulfill({
+  await page.route("**/api/engine/v1/**", (route) => {
+    const url = route.request().url();
+    const account = {
+      id: 3,
+      venue: "binance",
+      label: "Shell account",
+      is_testnet: true,
+      status: "verified",
+      verified_at: null,
+      permissions: { trade: true, withdraw: false },
+      credentials_set: true,
+      credential_hint: "…1234",
+      risk: { daily_loss_limit: null, max_drawdown_pct: null, breaker_policy: "cancel_orders" },
+      kill_switch: { active: false },
+      systems_count: 0,
+      created_at: "2026-10-22T10:00:00Z",
+      verification_pending: false,
+      probe_error: "",
+    };
+    const body = url.endsWith("/venues/")
+      ? {
+          results: [
+            {
+              id: "binance",
+              name: "Binance",
+              kinds: ["spot"],
+              has_testnet: true,
+              credential_fields: [],
+            },
+          ],
+          next: null,
+          count: 1,
+        }
+      : url.includes("/accounts/3/balance/")
+        ? { balances: [], as_of: null, pending: false, error: "" }
+        : url.endsWith("/accounts/3/")
+          ? account
+          : url.endsWith("/accounts/")
+            ? [account]
+            : { results: [], next: null, count: 0 };
+    return route.fulfill({
       status: 200,
       contentType: "application/json",
       headers: { "access-control-allow-origin": "*" },
-      body: JSON.stringify({ results: [], next: null, count: 0 }),
-    }),
-  );
+      body: JSON.stringify(body),
+    });
+  });
 }
 
 test("login renders and public login omits stale authorization", async ({ page }) => {
@@ -81,8 +120,8 @@ test("nested placeholders and not-found render", async ({ page }) => {
     ["/strategies/atr_strategies%2Fatr_allocation", "Strategy atr_strategies/atr_allocation"],
     ["/backtests/new", "New backtest"],
     ["/backtests/7", "Backtest #7"],
-    ["/accounts/new", "New account"],
-    ["/accounts/3", "Account #3"],
+    ["/accounts/new", "Add account"],
+    ["/accounts/3", "Shell account"],
   ]) {
     await page.goto(path);
     await expect(page.getByRole("heading", { name: heading })).toBeVisible();

@@ -10,9 +10,34 @@ export type Venue = {
 export type Instrument = components["schemas"]["Instrument"];
 export type Strategy = components["schemas"]["Version"];
 export type StrategyVersion = components["schemas"]["Version"];
-export type Account = components["schemas"]["Account"];
+export type AccountPermissions = {
+  trade?: boolean;
+  withdraw?: boolean;
+};
+export type AccountRisk = {
+  daily_loss_limit: string | null;
+  max_drawdown_pct: number | null;
+  breaker_policy: "cancel_orders" | "flatten";
+};
+export type Account = {
+  id: number;
+  venue: string;
+  label: string;
+  is_testnet: boolean;
+  status: "unverified" | "verified" | "invalid" | "disabled";
+  verified_at: string | null;
+  permissions: AccountPermissions | null;
+  credentials_set: boolean;
+  credential_hint: string;
+  risk: AccountRisk;
+  kill_switch: { active: boolean };
+  systems_count: number;
+  created_at: string;
+  verification_pending: boolean;
+  probe_error: string;
+};
 export type AccountBalance = {
-  balances: Array<Record<string, unknown>>;
+  balances: Array<{ currency: string; total: string; free: string }>;
   as_of: string | null;
   pending: boolean;
   error: string | null;
