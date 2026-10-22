@@ -70,6 +70,52 @@ async function mockMe(page: Page, isStaff = true) {
       body: JSON.stringify(body),
     });
   });
+  const strategySummary = {
+    key: "atr_strategies/atr_allocation",
+    title: "ATR allocation",
+    description_md: "Demo",
+    instrument_kinds: ["spot"],
+    recommended_timeframes: ["1h"],
+    warmup_bars: 200,
+    latest_version: {
+      version: "1.0.0",
+      meta: { live_capable: true, restart_safe: false, notes: [] },
+      published_at: "2026-10-22T10:00:00Z",
+    },
+  };
+  const strategyVersion = {
+    key: strategySummary.key,
+    version: "1.0.0",
+    title: strategySummary.title,
+    description_md: strategySummary.description_md,
+    instrument_kinds: strategySummary.instrument_kinds,
+    recommended_timeframes: strategySummary.recommended_timeframes,
+    warmup_bars: strategySummary.warmup_bars,
+    meta: strategySummary.latest_version.meta,
+    evidence: [],
+    published_at: strategySummary.latest_version.published_at,
+  };
+  await page.route("**/strategies/atr_strategies/atr_allocation/versions/1.0.0/", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(strategyVersion),
+    }),
+  );
+  await page.route("**/strategies/atr_strategies/atr_allocation/versions/", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ results: [strategyVersion], next: null, count: 1 }),
+    }),
+  );
+  await page.route("**/strategies/atr_strategies/atr_allocation/", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(strategySummary),
+    }),
+  );
 }
 
 test("login renders and public login omits stale authorization", async ({ page }) => {
@@ -117,7 +163,7 @@ test("nested placeholders and not-found render", async ({ page }) => {
   for (const [path, heading] of [
     ["/systems/new", "New system"],
     ["/systems/42", "System #42"],
-    ["/strategies/atr_strategies%2Fatr_allocation", "Strategy atr_strategies/atr_allocation"],
+    ["/strategies/atr_strategies%2Fatr_allocation", "ATR allocation"],
     ["/backtests/new", "New backtest"],
     ["/backtests/7", "Backtest #7"],
     ["/accounts/new", "Add account"],

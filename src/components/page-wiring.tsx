@@ -13,7 +13,6 @@ import {
   useOperatorSystems,
   usePortfolioSummary,
   useStrategies,
-  useStrategy,
   useSystem,
   useSystems,
 } from "@/lib/api/queries";
@@ -40,15 +39,6 @@ export function SystemProof() {
       {query.data ? `${query.data.name} · ${query.data.state}` : null}
     </DataProof>
   );
-}
-export function StrategiesProof() {
-  const query = useStrategies();
-  return <DataProof {...query}>{query.data?.results?.length ?? 0} strategies</DataProof>;
-}
-export function StrategyProof() {
-  const params = useParams<{ key: string }>();
-  const query = useStrategy(params.key);
-  return <DataProof {...query}>{query.data?.title}</DataProof>;
 }
 export function NewSystemProof() {
   const strategy = useStrategies();

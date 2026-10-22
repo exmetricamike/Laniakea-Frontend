@@ -13,7 +13,9 @@ import type {
   KillSwitch,
   PaginatedList,
   PortfolioSummary,
-  Strategy,
+  StrategySummary,
+  StrategyVersionDetail,
+  StrategyVersionSummary,
   TradingSystem,
   Venue,
 } from "@/lib/api/types";
@@ -56,14 +58,40 @@ export function useSystem(id: number) {
 export function useStrategies() {
   return useQuery({
     queryKey: queryKeys.strategies(),
+    retry: false,
     queryFn: async () =>
-      list(await api.get<Strategy[] | PaginatedList<Strategy>>("/api/engine/v1/strategies/")),
+      list(
+        await api.get<StrategySummary[] | PaginatedList<StrategySummary>>(
+          "/api/engine/v1/strategies/",
+        ),
+      ),
   });
 }
 export function useStrategy(key: string) {
   return useQuery({
     queryKey: queryKeys.strategy(key),
-    queryFn: () => api.get<Strategy>(strategyApiPath(key)),
+    retry: false,
+    queryFn: () => api.get<StrategySummary>(strategyApiPath(key)),
+  });
+}
+export function useStrategyVersions(key: string) {
+  return useQuery({
+    queryKey: queryKeys.strategyVersions(key),
+    retry: false,
+    queryFn: async () =>
+      list(
+        await api.get<StrategyVersionSummary[] | PaginatedList<StrategyVersionSummary>>(
+          `${strategyApiPath(key)}versions/`,
+        ),
+      ),
+  });
+}
+export function useStrategyVersion(key: string, version: string | null) {
+  return useQuery({
+    queryKey: queryKeys.strategyVersion(key, version ?? ""),
+    retry: false,
+    queryFn: () => api.get<StrategyVersionDetail>(`${strategyApiPath(key)}versions/${version}/`),
+    enabled: version !== null,
   });
 }
 export function useBacktests(filters: Record<string, string>) {

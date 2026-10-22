@@ -1,4 +1,12 @@
-import type { Account, Instrument, Strategy, TradingSystem, Venue } from "@/lib/api/types";
+import type {
+  Account,
+  Instrument,
+  StrategySummary,
+  StrategyVersionDetail,
+  StrategyVersionSummary,
+  TradingSystem,
+  Venue,
+} from "@/lib/api/types";
 
 export const venues: Venue[] = [
   {
@@ -37,35 +45,110 @@ export const instruments: Instrument[] = [
     timeframes: ["1h"],
   },
 ];
-export const strategies: Strategy[] = [
+export const strategies: StrategySummary[] = [
   {
     key: "atr_strategies/atr_allocation",
-    version: "1.0.0",
     title: "ATR allocation",
-    description_md: "Demo",
+    description_md: "# ATR allocation\n\n<script>window.catalogScript = true</script>\n\nUses ATR.",
     instrument_kinds: ["spot"],
     recommended_timeframes: ["1h"],
     warmup_bars: 200,
+    latest_version: {
+      version: "1.0.0",
+      meta: { live_capable: true, restart_safe: false, notes: ["Review position sizing."] },
+      published_at: "2026-10-22T10:00:00Z",
+    },
   },
   {
     key: "trend/breakout",
-    version: "1.0.0",
     title: "Trend breakout",
-    description_md: "Demo",
+    description_md:
+      "## Research log\n\n| Date | Result |\n| --- | --- |\n| 2026-10-22 | Positive |",
     instrument_kinds: ["spot"],
     recommended_timeframes: ["1h"],
     warmup_bars: 100,
+    latest_version: {
+      version: "1.0.0",
+      meta: { live_capable: false, restart_safe: true, notes: [] },
+      published_at: "2026-10-21T10:00:00Z",
+    },
   },
   {
     key: "mean/reversion",
-    version: "1.0.0",
     title: "Mean reversion",
-    description_md: "Demo",
+    description_md: "",
     instrument_kinds: ["spot"],
     recommended_timeframes: ["1h"],
     warmup_bars: 50,
+    latest_version: {
+      version: "1.0.0",
+      meta: { live_capable: false, restart_safe: true, notes: [] },
+      published_at: null,
+    },
   },
 ];
+
+export const strategyVersions: Record<string, StrategyVersionSummary[]> = {
+  "atr_strategies/atr_allocation": [
+    {
+      key: "atr_strategies/atr_allocation",
+      version: "1.0.0",
+      title: "ATR allocation",
+      description_md: "# ATR allocation\n\nUses ATR.",
+      instrument_kinds: ["spot"],
+      recommended_timeframes: ["1h"],
+      warmup_bars: 200,
+      meta: { live_capable: true, restart_safe: false, notes: ["Review position sizing."] },
+      evidence: [{ backtest_id: 1, label: "Published ATR backtest" }],
+      published_at: "2026-10-22T10:00:00Z",
+    },
+    {
+      key: "atr_strategies/atr_allocation",
+      version: "0.9.0",
+      title: "ATR allocation",
+      description_md: "# ATR allocation\n\nUses ATR.",
+      instrument_kinds: ["spot"],
+      recommended_timeframes: ["1h"],
+      warmup_bars: 200,
+      meta: { live_capable: false, restart_safe: true, notes: [] },
+      evidence: [],
+      published_at: "2026-10-20T10:00:00Z",
+    },
+  ],
+  "trend/breakout": [],
+  "mean/reversion": [],
+};
+
+export const strategyVersionDetails: Record<string, StrategyVersionDetail> = {
+  "atr_strategies/atr_allocation:1.0.0": {
+    ...strategyVersions["atr_strategies/atr_allocation"][0],
+    params_schema: {
+      properties: {
+        trailing_atr_period: {
+          type: "integer",
+          minimum: 1,
+          default: 5,
+          description: "ATR lookback period.",
+        },
+      },
+    },
+    default_params: { trailing_atr_period: 5 },
+  },
+  "atr_strategies/atr_allocation:0.9.0": {
+    ...strategyVersions["atr_strategies/atr_allocation"][1],
+    params_schema: {
+      properties: {
+        trailing_atr_period: {
+          type: "integer",
+          minimum: 1,
+          default: 3,
+          description: "ATR lookback period.",
+        },
+      },
+    },
+    default_params: { trailing_atr_period: 3 },
+  },
+};
 export const accounts: Account[] = [
   {
     id: 7,

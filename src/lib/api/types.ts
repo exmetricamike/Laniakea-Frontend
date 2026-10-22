@@ -8,8 +8,40 @@ export type Venue = {
   credential_fields: Array<{ name: string; label: string; secret: boolean }>;
 };
 export type Instrument = components["schemas"]["Instrument"];
-export type Strategy = components["schemas"]["Version"];
-export type StrategyVersion = components["schemas"]["Version"];
+export type JsonValue =
+  string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+export type StrategyMeta = {
+  live_capable: boolean;
+  restart_safe: boolean;
+  notes: string[];
+};
+export type StrategySummary = {
+  key: string;
+  title: string;
+  description_md: string;
+  instrument_kinds: string[];
+  recommended_timeframes: string[];
+  warmup_bars: number;
+  latest_version: {
+    version: string;
+    meta: StrategyMeta;
+    published_at?: string | null;
+  };
+};
+export type StrategyVersionSummary = Omit<StrategySummary, "latest_version"> & {
+  version: string;
+  meta: StrategyMeta;
+  evidence: StrategyEvidence[];
+  published_at?: string | null;
+};
+export type ParamsSchema = {
+  properties?: Record<string, Record<string, unknown>>;
+};
+export type StrategyEvidence = { backtest_id: number; label: string };
+export type StrategyVersionDetail = StrategyVersionSummary & {
+  params_schema?: ParamsSchema | null;
+  default_params?: Record<string, JsonValue> | null;
+};
 export type AccountPermissions = {
   trade?: boolean;
   withdraw?: boolean;

@@ -4,6 +4,8 @@ import {
   instruments,
   portfolio,
   strategies,
+  strategyVersionDetails,
+  strategyVersions,
   systems,
   venues,
 } from "@/mocks/fixtures/data";
@@ -27,6 +29,7 @@ let accounts = loadAccounts();
 let nextAccountId = Math.max(20, ...accounts.map((item) => item.id + 1));
 const verificationPolls = new Map<number, number>();
 const balancePolls = new Map<number, number>();
+let failNextVersionDetail = false;
 const list = <T>(results: T[]) => ({ results, next: null, count: results.length });
 const command = {
   id: 77,
@@ -47,6 +50,7 @@ export function resetAccountMocks(): void {
   if (typeof sessionStorage !== "undefined") sessionStorage.removeItem(STORE_KEY);
   verificationPolls.clear();
   balancePolls.clear();
+  failNextVersionDetail = false;
 }
 export async function idempotent(
   request: Request,
@@ -67,6 +71,13 @@ export const handlers = [
   http.post(`${api}/__mocks/reset`, () => {
     resetAccountMocks();
     resetIdempotency();
+    return new HttpResponse(null, {
+      status: 204,
+      headers: { "Access-Control-Allow-Origin": "*" },
+    });
+  }),
+  http.post(`${api}/__mocks/fail-next/strategy-version-detail`, () => {
+    failNextVersionDetail = true;
     return new HttpResponse(null, {
       status: 204,
       headers: { "Access-Control-Allow-Origin": "*" },
@@ -96,17 +107,24 @@ export const handlers = [
     }),
   ),
   http.get(`${api}/api/engine/v1/strategies/`, () => HttpResponse.json(list(strategies))),
-  http.get(`${api}/api/engine/v1/strategies/:family/:name/`, ({ params }) =>
-    HttpResponse.json(
-      strategies.find((item) => item.key === `${params.family}/${params.name}`) ?? strategies[0],
-    ),
-  ),
-  http.get(`${api}/api/engine/v1/strategies/:family/:name/versions/`, () =>
-    HttpResponse.json(list(strategies)),
-  ),
-  http.get(`${api}/api/engine/v1/strategies/:family/:name/versions/:version/`, () =>
-    HttpResponse.json(strategies[0]),
-  ),
+  http.get(`${api}/api/engine/v1/strategies/:family/:name/`, ({ params }) => {
+    const strategy = strategies.find((item) => item.key === `${params.family}/${params.name}`);
+    return strategy ? HttpResponse.json(strategy) : error("not_found", "Not found.", 404);
+  }),
+  http.get(`${api}/api/engine/v1/strategies/:family/:name/versions/`, ({ params }) => {
+    const key = `${params.family}/${params.name}`;
+    return key in strategyVersions
+      ? HttpResponse.json(list(strategyVersions[key]))
+      : error("not_found", "Not found.", 404);
+  }),
+  http.get(`${api}/api/engine/v1/strategies/:family/:name/versions/:version/`, ({ params }) => {
+    if (failNextVersionDetail) {
+      failNextVersionDetail = false;
+      return error("server_error", "Temporary failure.", 500);
+    }
+    const detail = strategyVersionDetails[`${params.family}/${params.name}:${params.version}`];
+    return detail ? HttpResponse.json(detail) : error("not_found", "Not found.", 404);
+  }),
   http.get(`${api}/api/engine/v1/accounts/`, () => HttpResponse.json(list(accounts))),
   http.get(`${api}/api/engine/v1/accounts/:id/`, ({ params }) => {
     const id = Number(params.id);
