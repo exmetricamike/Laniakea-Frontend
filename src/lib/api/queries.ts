@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useRef } from "react";
 import { api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/keys";
@@ -9,6 +9,11 @@ import type {
   Account,
   AccountBalance,
   Backtest,
+  BacktestEquity,
+  BacktestJob,
+  BacktestOrder,
+  BacktestTrade,
+  ChartPayload,
   Instrument,
   KillSwitch,
   PaginatedList,
@@ -94,17 +99,33 @@ export function useStrategyVersion(key: string, version: string | null) {
     enabled: version !== null,
   });
 }
-export function useBacktests(filters: Record<string, string>) {
-  return useQuery({
+export function useBacktestsInfinite(filters: Record<string, string>) {
+  return useInfiniteQuery({
     queryKey: queryKeys.backtests(filters),
-    queryFn: () =>
-      api.get<PaginatedList<Backtest>>(`/api/engine/v1/backtests/${queryString(filters)}`),
+    initialPageParam: "",
+    queryFn: ({ pageParam }) =>
+      api.get<PaginatedList<Backtest>>(
+        `/api/engine/v1/backtests/${queryString({ ...filters, cursor: pageParam })}`,
+      ),
+    getNextPageParam: (page) => {
+      if (!page.next) return undefined;
+      return new URL(page.next).searchParams.get("cursor") ?? undefined;
+    },
   });
 }
-export function useBacktest(id: number) {
+export function useBacktests(filters: Record<string, string>) {
+  return useBacktestsInfinite(filters);
+}
+export function useBacktest(id: number, options: { poll?: boolean } = {}) {
   return useQuery({
     queryKey: queryKeys.backtest(id),
-    queryFn: () => api.get<Backtest>(`/api/engine/v1/backtests/${id}/`),
+    queryFn: () => api.get<BacktestJob>(`/api/engine/v1/backtests/${id}/`),
+    enabled: id > 0,
+    refetchInterval: (query) =>
+      options.poll &&
+      (query.state.data?.status === "queued" || query.state.data?.status === "running")
+        ? 2_000
+        : false,
   });
 }
 export function useAccounts() {
@@ -143,11 +164,44 @@ export function useVenues() {
       list(await api.get<Venue[] | PaginatedList<Venue>>("/api/engine/v1/venues/")),
   });
 }
-export function useInstruments(filters: { venue?: string; page_size?: number }) {
+export function useInstruments(filters: {
+  venue?: string;
+  kind?: string;
+  search?: string;
+  page_size?: number;
+}) {
   return useQuery({
     queryKey: queryKeys.instruments(filters),
     queryFn: () =>
       api.get<PaginatedList<Instrument>>(`/api/engine/v1/instruments/${queryString(filters)}`),
+  });
+}
+export function useBacktestEquity(id: number, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.backtestEquity(id),
+    queryFn: () => api.get<BacktestEquity>(`/api/engine/v1/backtests/${id}/equity/`),
+    enabled,
+  });
+}
+export function useBacktestTrades(id: number, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.backtestTrades(id),
+    queryFn: () => api.get<PaginatedList<BacktestTrade>>(`/api/engine/v1/backtests/${id}/trades/`),
+    enabled,
+  });
+}
+export function useBacktestOrders(id: number, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.backtestOrders(id),
+    queryFn: () => api.get<PaginatedList<BacktestOrder>>(`/api/engine/v1/backtests/${id}/orders/`),
+    enabled,
+  });
+}
+export function useBacktestChart(id: number, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.backtestChart(id),
+    queryFn: () => api.get<ChartPayload>(`/api/engine/v1/backtests/${id}/chart/`),
+    enabled,
   });
 }
 export function useKillSwitches() {

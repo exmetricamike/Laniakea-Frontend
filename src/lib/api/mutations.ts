@@ -2,9 +2,9 @@
 
 import { useMutation, useQueryClient, type UseMutationOptions } from "@tanstack/react-query";
 import { useRef } from "react";
-import { api, ApiError } from "@/lib/api/client";
+import { api, apiRequest, ApiError } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/keys";
-import type { Account } from "@/lib/api/types";
+import type { Account, BacktestJob, CreateBacktestBody } from "@/lib/api/types";
 
 export type IntentKeyState = { key: string };
 export type IntentKeyEvent = "success" | "reset" | "retry";
@@ -74,4 +74,31 @@ export function useIdempotentMutation<TData, TVars>(
       mutation.reset();
     },
   };
+}
+
+export function useCreateBacktest() {
+  const client = useQueryClient();
+  return useIdempotentMutation<BacktestJob, CreateBacktestBody>(
+    (body, idempotencyKey) =>
+      apiRequest<BacktestJob>("POST", "/api/engine/v1/backtests/", { body, idempotencyKey }),
+    {
+      onSuccess: () => client.invalidateQueries({ queryKey: ["backtests"] }),
+    },
+  );
+}
+
+export function useCancelBacktest(id: number) {
+  const client = useQueryClient();
+  return useIdempotentMutation<BacktestJob, void>(
+    (_, idempotencyKey) =>
+      apiRequest<BacktestJob>("POST", `/api/engine/v1/backtests/${id}/cancel/`, {
+        idempotencyKey,
+      }),
+    {
+      onSuccess: () => {
+        void client.invalidateQueries({ queryKey: queryKeys.backtest(id) });
+        void client.invalidateQueries({ queryKey: ["backtests"] });
+      },
+    },
+  );
 }

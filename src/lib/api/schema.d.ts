@@ -68,6 +68,118 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/engine/v1/backtests/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["backtests_retrieve"];
+    put?: never;
+    post: operations["backtests_create"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/engine/v1/backtests/{job_id}/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["backtests_retrieve_2"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/engine/v1/backtests/{job_id}/cancel/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["backtests_cancel_create"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/engine/v1/backtests/{job_id}/chart/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["backtests_chart_retrieve"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/engine/v1/backtests/{job_id}/equity/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["backtests_equity_retrieve"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/engine/v1/backtests/{job_id}/orders/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["backtests_orders_retrieve"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/engine/v1/backtests/{job_id}/trades/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["backtests_trades_retrieve"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/engine/v1/instruments/": {
     parameters: {
       query?: never;
@@ -205,7 +317,7 @@ export interface components {
       readonly venue: string;
       readonly label: string;
       readonly is_testnet: boolean;
-      readonly status: components["schemas"]["StatusEnum"];
+      readonly status: components["schemas"]["AccountStatusEnum"];
       /** Format: date-time */
       readonly verified_at: string | null;
       readonly permissions: unknown;
@@ -223,6 +335,14 @@ export interface components {
       readonly verification_pending: boolean;
       readonly probe_error: string;
     };
+    /**
+     * @description * `unverified` - Unverified
+     *     * `verified` - Verified
+     *     * `invalid` - Invalid
+     *     * `disabled` - Disabled
+     * @enum {string}
+     */
+    AccountStatusEnum: "unverified" | "verified" | "invalid" | "disabled";
     AccountWriteRequest: {
       venue?: string;
       label?: string;
@@ -236,6 +356,76 @@ export interface components {
       max_drawdown_pct?: number | null;
       breaker_policy?: components["schemas"]["BreakerPolicyEnum"];
     };
+    BacktestJob: {
+      readonly id: number;
+      strategy: string;
+      version: string;
+      params?: unknown;
+      readonly instrument: string;
+      timeframe: string;
+      /** Format: date-time */
+      start: string;
+      /** Format: date-time */
+      end: string;
+      /** Format: date-time */
+      in_sample_end?: string | null;
+      /** Format: date-time */
+      trade_start?: string | null;
+      /** Format: decimal */
+      allocation: string;
+      cost_model?: unknown;
+      status?: components["schemas"]["BacktestJobStatusEnum"];
+      /** Format: double */
+      progress?: number;
+      error?: string;
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      started_at?: string | null;
+      /** Format: date-time */
+      finished_at?: string | null;
+      readonly metrics: string;
+      readonly caveats: string;
+      dataset_sha256?: string;
+      engine_revision?: string;
+      readonly trades_count: string;
+    };
+    BacktestJobRequest: {
+      strategy: string;
+      version: string;
+      params?: unknown;
+      timeframe: string;
+      /** Format: date-time */
+      start: string;
+      /** Format: date-time */
+      end: string;
+      /** Format: date-time */
+      in_sample_end?: string | null;
+      /** Format: date-time */
+      trade_start?: string | null;
+      /** Format: decimal */
+      allocation: string;
+      cost_model?: unknown;
+      status?: components["schemas"]["BacktestJobStatusEnum"];
+      /** Format: double */
+      progress?: number;
+      error?: string;
+      /** Format: date-time */
+      started_at?: string | null;
+      /** Format: date-time */
+      finished_at?: string | null;
+      dataset_sha256?: string;
+      engine_revision?: string;
+    };
+    /**
+     * @description * `queued` - Queued
+     *     * `running` - Running
+     *     * `done` - Done
+     *     * `failed` - Failed
+     *     * `cancelled` - Cancelled
+     * @enum {string}
+     */
+    BacktestJobStatusEnum: "queued" | "running" | "done" | "failed" | "cancelled";
     /**
      * @description * `cancel_orders` - Cancel Orders
      *     * `flatten` - Flatten
@@ -294,14 +484,6 @@ export interface components {
       max_drawdown_pct?: number | null;
       breaker_policy?: components["schemas"]["BreakerPolicyEnum"];
     };
-    /**
-     * @description * `unverified` - Unverified
-     *     * `verified` - Verified
-     *     * `invalid` - Invalid
-     *     * `disabled` - Disabled
-     * @enum {string}
-     */
-    StatusEnum: "unverified" | "verified" | "invalid" | "disabled";
     Version: {
       key: string;
       version: string;
@@ -474,6 +656,168 @@ export interface operations {
         content: {
           "application/json": components["schemas"]["Account"];
         };
+      };
+    };
+  };
+  backtests_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BacktestJob"];
+        };
+      };
+    };
+  };
+  backtests_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["BacktestJobRequest"];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BacktestJob"];
+        };
+      };
+    };
+  };
+  backtests_retrieve_2: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        job_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  backtests_cancel_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        job_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  backtests_chart_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        job_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  backtests_equity_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        job_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  backtests_orders_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        job_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  backtests_trades_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        job_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

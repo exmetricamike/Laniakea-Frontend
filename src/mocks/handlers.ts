@@ -38,6 +38,36 @@ const command = {
   status: "pending",
   created_at: "2026-10-22T10:00:00Z",
 };
+const backtestJob = {
+  id: 1,
+  strategy: "atr_strategies/atr_allocation",
+  version: "1.0.0",
+  params: {},
+  instrument: { id: 812, venue: "binance", symbol: "BTC/USDT" },
+  timeframe: "1h",
+  start: "2021-01-01T00:00:00Z",
+  end: "2021-03-01T00:00:00Z",
+  in_sample_end: "2021-02-01T00:00:00Z",
+  trade_start: null,
+  allocation: "10000",
+  cost_model: { instrument_kind: "spot", fee_rate: 0.001, slippage_bps: 0, leverage: 1 },
+  status: "done",
+  progress: 1,
+  error: "",
+  created_at: "2026-10-22T10:00:00Z",
+  started_at: "2026-10-22T10:00:01Z",
+  finished_at: "2026-10-22T10:00:02Z",
+  metrics: {
+    full: { total_return: 0.1, max_drawdown: 0.02, trades: 1 },
+    in_sample: { total_return: 0.05, max_drawdown: 0.01, trades: 1 },
+    out_of_sample: { total_return: 0.05, max_drawdown: 0.01, trades: 0 },
+  },
+  caveats: ["Demo caveat"],
+  dataset_sha256: "abc123",
+  engine_revision: "mock",
+  trades_count: 1,
+};
+let queuedBacktestPolls = 0;
 function error(code: string, message: string, status: number) {
   return HttpResponse.json({ error: { code, message, fields: {}, reasons: [] } }, { status });
 }
@@ -51,6 +81,7 @@ export function resetAccountMocks(): void {
   verificationPolls.clear();
   balancePolls.clear();
   failNextVersionDetail = false;
+  queuedBacktestPolls = 0;
 }
 export async function idempotent(
   request: Request,
@@ -448,37 +479,53 @@ export const handlers = [
     HttpResponse.json(list([{ ...command, status: "done", reason: null, result: {} }])),
   ),
   http.get(`${api}/api/engine/v1/systems/:id/shadow-reports/`, () => HttpResponse.json(list([]))),
-  http.get(`${api}/api/engine/v1/backtests/`, () =>
-    HttpResponse.json(
-      list([
-        { id: 1, strategy: strategies[0].key, status: "done", caveats: ["Demo"] },
-        { id: 2, strategy: strategies[1].key, status: "running" },
-      ]),
-    ),
-  ),
-  http.get(`${api}/api/engine/v1/backtests/:id/`, ({ params }) =>
-    HttpResponse.json(
-      Number(params.id) === 2
-        ? { id: 2, strategy: strategies[1].key, status: "running", progress: 0.5 }
-        : {
-            id: 1,
-            strategy: strategies[0].key,
-            status: "done",
-            in_sample_end: "2022-12-31T00:00:00Z",
-            cost_model: { fee_rate: 0.001 },
-            caveats: ["Demo caveat"],
-            result: { metrics: { full: {}, in_sample: {}, out_of_sample: {} } },
-          },
-    ),
-  ),
+  http.get(`${api}/api/engine/v1/backtests/`, () => HttpResponse.json(list([backtestJob]))),
+  http.get(`${api}/api/engine/v1/backtests/:id/`, ({ params }) => {
+    if (Number(params.id) !== 2) return HttpResponse.json(backtestJob);
+    queuedBacktestPolls += 1;
+    return HttpResponse.json(
+      queuedBacktestPolls < 2
+        ? { ...backtestJob, id: 2, status: "queued", progress: 0, metrics: null }
+        : { ...backtestJob, id: 2 },
+    );
+  }),
   http.get(`${api}/api/engine/v1/backtests/:id/equity/`, () =>
     HttpResponse.json({ t: [1730811600000], value: ["10000"], drawdown: [0] }),
   ),
   http.get(`${api}/api/engine/v1/backtests/:id/trades/`, () =>
-    HttpResponse.json(list([{ id: 901, status: "closed" }])),
+    HttpResponse.json(
+      list([
+        {
+          side: "long",
+          entry_time: "2021-01-01T00:00:00",
+          exit_time: "2021-01-02T00:00:00",
+          pnl_net: "1",
+          pnl: "1",
+          commission: "0",
+          bars: 1,
+          size: "1",
+          segment: "in_sample",
+          entry_price: "1",
+        },
+      ]),
+    ),
   ),
   http.get(`${api}/api/engine/v1/backtests/:id/orders/`, () =>
-    HttpResponse.json(list([{ id: 9001, status: "filled" }])),
+    HttpResponse.json(
+      list([
+        {
+          tag: null,
+          side: "buy",
+          size: "1",
+          type: "Market",
+          price: "1",
+          status: "Completed",
+          created: "2021-01-01T00:00:00",
+          filled_at: "2021-01-01T00:00:00",
+          fill_price: "1",
+        },
+      ]),
+    ),
   ),
   http.get(`${api}/api/engine/v1/backtests/:id/chart/`, () =>
     HttpResponse.json({
@@ -544,7 +591,24 @@ export const handlers = [
     );
   }),
   http.post(`${api}/api/engine/v1/backtests/`, async ({ request }) => {
-    const response = { id: 3, status: "queued", strategy: strategies[0].key };
+    const body = (await request.clone().json()) as {
+      instrument?: number;
+      cost_model?: { instrument_kind?: string };
+    };
+    if (body.cost_model?.instrument_kind === "linear_perp") {
+      return HttpResponse.json(
+        {
+          error: {
+            code: "validation_error",
+            message: "Invalid request.",
+            fields: { instrument: ["No curated market data for this instrument and timeframe."] },
+            reasons: [],
+          },
+        },
+        { status: 400 },
+      );
+    }
+    const response = { ...backtestJob, id: 3, status: "queued" as const, progress: 0 };
     const cached = await idempotent(request, response);
     return cached ?? HttpResponse.json(response, { status: 201 });
   }),

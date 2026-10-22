@@ -5,8 +5,6 @@ import { useMode } from "@/components/app-shell";
 import { DataProof } from "@/components/data-proof";
 import {
   useAccounts,
-  useBacktest,
-  useBacktests,
   useInstruments,
   useKillSwitches,
   useMe,
@@ -59,23 +57,6 @@ export function NewSystemProof() {
       · first instruments: {instrument.data?.results.map((item) => item.symbol).join(", ")}
     </DataProof>
   );
-}
-export function BacktestsProof() {
-  const query = useBacktests({});
-  return <DataProof {...query}>{query.data?.results?.length ?? 0} backtests</DataProof>;
-}
-export function BacktestProof() {
-  const params = useParams<{ id: string }>();
-  const query = useBacktest(Number(params.id));
-  return (
-    <DataProof {...query}>
-      {query.data ? `${String(query.data.strategy)} · ${query.data.status}` : null}
-    </DataProof>
-  );
-}
-export function NewBacktestProof() {
-  const query = useStrategies();
-  return <DataProof {...query}>{query.data?.results?.length ?? 0} strategies available</DataProof>;
 }
 export function RiskProof() {
   const query = useKillSwitches();

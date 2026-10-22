@@ -56,13 +56,39 @@ async function mockMe(page: Page, isStaff = true) {
           next: null,
           count: 1,
         }
-      : url.includes("/accounts/3/balance/")
-        ? { balances: [], as_of: null, pending: false, error: "" }
-        : url.endsWith("/accounts/3/")
-          ? account
-          : url.endsWith("/accounts/")
-            ? [account]
-            : { results: [], next: null, count: 0 };
+      : url.endsWith("/backtests/7/")
+        ? {
+            id: 7,
+            strategy: "atr_strategies/atr_allocation",
+            version: "1.0.0",
+            params: {},
+            instrument: { id: 812, venue: "binance", symbol: "BTC/USDT" },
+            timeframe: "1h",
+            start: "2021-01-01T00:00:00Z",
+            end: "2021-03-01T00:00:00Z",
+            in_sample_end: null,
+            trade_start: null,
+            allocation: "10000",
+            cost_model: { instrument_kind: "spot", fee_rate: 0.001, slippage_bps: 0, leverage: 1 },
+            status: "done",
+            progress: 1,
+            error: "",
+            created_at: "2026-10-22T10:00:00Z",
+            started_at: null,
+            finished_at: null,
+            metrics: {},
+            caveats: [],
+            dataset_sha256: "abc",
+            engine_revision: "test",
+            trades_count: 0,
+          }
+        : url.includes("/accounts/3/balance/")
+          ? { balances: [], as_of: null, pending: false, error: "" }
+          : url.endsWith("/accounts/3/")
+            ? account
+            : url.endsWith("/accounts/")
+              ? [account]
+              : { results: [], next: null, count: 0 };
     return route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -165,7 +191,7 @@ test("nested placeholders and not-found render", async ({ page }) => {
     ["/systems/42", "System #42"],
     ["/strategies/atr_strategies%2Fatr_allocation", "ATR allocation"],
     ["/backtests/new", "New backtest"],
-    ["/backtests/7", "Backtest #7"],
+    ["/backtests/7", "atr_strategies/atr_allocation@1.0.0"],
     ["/accounts/new", "Add account"],
     ["/accounts/3", "Shell account"],
   ]) {

@@ -1,9 +1,4 @@
-import { PlaceholderPage } from "@/components/placeholder-page";
-import { NewBacktestProof } from "@/components/page-wiring";
+import { NewBacktestPage as NewBacktestContent } from "@/components/backtests-pages";
 export default function NewBacktestPage() {
-  return (
-    <PlaceholderPage title="New backtest">
-      <NewBacktestProof />
-    </PlaceholderPage>
-  );
+  return <NewBacktestContent />;
 }

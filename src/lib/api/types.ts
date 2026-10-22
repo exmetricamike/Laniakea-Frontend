@@ -107,6 +107,103 @@ export type ChartSeries = Record<string, unknown> & {
   low: string[];
   close: string[];
 };
-export type Backtest = Record<string, unknown> & { id: number; status: string };
+export type BacktestStatus = "queued" | "running" | "done" | "failed" | "cancelled";
+export type BacktestMetric = Record<string, number | string | null | undefined>;
+export type BacktestMetrics = {
+  full?: BacktestMetric;
+  in_sample?: BacktestMetric;
+  out_of_sample?: BacktestMetric;
+};
+export type BacktestCostModel = {
+  instrument_kind: "spot" | "linear_perp";
+  fee_rate: number;
+  slippage_bps: number;
+  leverage: number;
+};
+export type BacktestJob = {
+  id: number;
+  strategy: string;
+  version: string;
+  params: Record<string, JsonValue>;
+  instrument: { id: number; venue: string; symbol: string };
+  timeframe: string;
+  start: string;
+  end: string;
+  in_sample_end: string | null;
+  trade_start: string | null;
+  allocation: string;
+  cost_model: BacktestCostModel;
+  status: BacktestStatus;
+  progress: number;
+  error: string;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  metrics: BacktestMetrics | null;
+  caveats: string[];
+  dataset_sha256?: string;
+  engine_revision?: string;
+  trades_count: number;
+};
+export type CreateBacktestBody = Omit<
+  BacktestJob,
+  | "id"
+  | "instrument"
+  | "status"
+  | "progress"
+  | "error"
+  | "created_at"
+  | "started_at"
+  | "finished_at"
+  | "metrics"
+  | "caveats"
+  | "dataset_sha256"
+  | "engine_revision"
+  | "trades_count"
+> & { instrument: number; in_sample_end?: string; trade_start?: string };
+export type BacktestEquity = { t: number[]; value: string[]; drawdown: number[] };
+export type BacktestTrade = {
+  pnl: string;
+  pnl_net: string;
+  commission: string;
+  bars: number;
+  side: string;
+  size: string;
+  segment: string;
+  entry_time: string;
+  exit_time: string;
+  entry_price: string;
+};
+export type BacktestOrder = {
+  tag: string | null;
+  side: string;
+  size: string;
+  type: string;
+  price: string;
+  status: string;
+  created: string;
+  filled_at: string | null;
+  fill_price: string | null;
+};
+export type ChartPayload = {
+  t: number[];
+  open: string[];
+  high: string[];
+  low: string[];
+  close: string[];
+  volume: string[];
+  indicators: Record<string, unknown>;
+  markers: Array<{
+    t: number;
+    kind: "fill";
+    side: "buy" | "sell";
+    price: string;
+    size: string;
+    origin: string;
+    order_id: number | null;
+  }>;
+  open_orders: unknown[];
+};
+export type Backtest = BacktestJob;
 export type KillSwitch = Record<string, unknown> & { active: boolean; scope: string };
 export type WsEnvelope<T> = { type: string; channel: string; seq: number; time: string; data: T };
