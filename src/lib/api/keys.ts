@@ -1,0 +1,33 @@
+export const queryKeys = {
+  portfolio: {
+    summary: (mode: string, period: string) => ["portfolio", "summary", mode, period] as const,
+    equity: (mode: string, range: string) => ["portfolio", "equity", mode, range] as const,
+    trades: (filters: object) => ["portfolio", "trades", filters] as const,
+    orders: (mode: string) => ["portfolio", "orders", mode] as const,
+  },
+  system: {
+    detail: (id: number) => ["system", id] as const,
+    orders: (id: number, status: string) => ["system", id, "orders", status] as const,
+    trades: (id: number, status: string) => ["system", id, "trades", status] as const,
+    equity: (id: number, range: string) => ["system", id, "equity", range] as const,
+    chart: (id: number, range: string) => ["system", id, "chart", range] as const,
+    events: (id: number) => ["system", id, "events"] as const,
+    commands: (id: number) => ["system", id, "commands"] as const,
+  },
+  venues: () => ["venues"] as const,
+  instruments: (filters: object) => ["instruments", filters] as const,
+  strategies: () => ["strategies"] as const,
+  strategy: (key: string) => ["strategy", key] as const,
+  strategyVersions: (key: string) => ["strategy", key, "versions"] as const,
+  strategyVersion: (key: string, version: string) =>
+    ["strategy", key, "versions", version] as const,
+  accounts: () => ["accounts"] as const,
+  account: (id: number) => ["account", id] as const,
+  accountBalance: (id: number) => ["account", id, "balance"] as const,
+  backtests: (filters: object) => ["backtests", filters] as const,
+  backtest: (id: number) => ["backtest", id] as const,
+  risk: () => ["risk"] as const,
+  systems: (filters: object) => ["systems", filters] as const,
+  me: () => ["me"] as const,
+  operator: { systems: () => ["operator", "systems"] as const },
+};

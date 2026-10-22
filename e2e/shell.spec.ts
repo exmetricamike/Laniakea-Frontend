@@ -8,12 +8,27 @@ const staff = {
   is_staff: true,
 };
 async function mockMe(page: Page, isStaff = true) {
+  await page.addInitScript(() => {
+    localStorage.setItem("laniakea.access", "test-token");
+    localStorage.setItem("laniakea.refresh", "test-refresh");
+  });
+  await page.route("**/api/jwt/refresh/", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: '{"access":"x"}' }),
+  );
   await page.route("**/api/users/me/", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
       headers: { "access-control-allow-origin": "*" },
       body: JSON.stringify({ ...staff, is_staff: isStaff }),
+    }),
+  );
+  await page.route("**/api/engine/v1/**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": "*" },
+      body: JSON.stringify({ results: [], next: null, count: 0 }),
     }),
   );
 }

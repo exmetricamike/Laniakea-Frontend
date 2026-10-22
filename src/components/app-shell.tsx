@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
@@ -19,8 +20,8 @@ import {
   UserRound,
   type LucideIcon,
 } from "lucide-react";
-import { api } from "@/lib/api/client";
 import { clearTokens } from "@/lib/auth";
+import { useMe } from "@/lib/api/queries";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,8 +40,12 @@ type ModeState = { mode: Mode; setMode: (mode: Mode) => void };
 type User = { email: string; is_staff: boolean };
 type Item = { href: string; label: string; icon: LucideIcon; staff?: boolean };
 
-const useMode = create<ModeState>()(
-  persist((set) => ({ mode: "live", setMode: (mode) => set({ mode }) }), { name: "laniakea.mode" }),
+export const useMode = create<ModeState>()(
+  persist((set) => ({ mode: "live", setMode: (mode) => set({ mode }) }), {
+    name: "laniakea.mode",
+    // Rehydrated after mount (AppShell) so the server and first client render agree.
+    skipHydration: true,
+  }),
 );
 
 const items: Item[] = [
@@ -136,9 +141,11 @@ function Sidebar({ isStaff }: { isStaff: boolean }) {
 
 function UserMenu({ user }: { user: User | null }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { theme, setTheme } = useTheme();
 
   function logout() {
+    queryClient.clear();
     clearTokens();
     router.replace("/login");
   }
@@ -221,21 +228,10 @@ function TopBar({ user }: { user: User | null }) {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const { data: user } = useMe();
 
   useEffect(() => {
-    let active = true;
-
-    api
-      .get<User>("/api/users/me/")
-      .then((result) => {
-        if (active) setUser(result);
-      })
-      .catch(() => {});
-
-    return () => {
-      active = false;
-    };
+    void useMode.persist.rehydrate();
   }, []);
 
   return (
@@ -243,7 +239,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="min-h-screen md:flex">
         <Sidebar isStaff={user?.is_staff === true} />
         <div className="min-w-0 flex-1">
-          <TopBar user={user} />
+          <TopBar user={user ?? null} />
           <main className="p-5 md:p-8">{children}</main>
         </div>
       </div>

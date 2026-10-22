@@ -1,15 +1,17 @@
 "use client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError, publicRequest } from "@/lib/api/client";
 import { setTokens } from "@/lib/auth";
+import { safeNext } from "@/lib/auth-redirect";
 type AuthResponse = { access: string; refresh: string };
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const search = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -24,7 +26,7 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
       setTokens(result.access, result.refresh);
-      router.replace("/portfolio");
+      router.replace(safeNext(search.get("next")));
     } catch (reason) {
       setError(reason instanceof ApiError ? reason.message : "Login failed");
       setLoading(false);
@@ -77,5 +79,12 @@ export default function LoginPage() {
         </Link>
       </div>
     </form>
+  );
+}
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }

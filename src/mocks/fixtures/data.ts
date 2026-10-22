@@ -1,0 +1,145 @@
+import type { Account, Instrument, Strategy, TradingSystem, Venue } from "@/lib/api/types";
+
+export const venues: Venue[] = [
+  {
+    id: "binance",
+    name: "Binance",
+    kinds: ["spot", "linear_perp"],
+    has_testnet: true,
+    credential_fields: [{ name: "api_key", label: "API key", secret: false }],
+  },
+];
+export const instruments: Instrument[] = [
+  {
+    id: 812,
+    venue: "binance",
+    symbol: "BTC/USDT",
+    kind: "spot",
+    base: "BTC",
+    quote: "USDT",
+    settle: "USDT",
+    tick_size: "0.1",
+    lot_size: "0.0001",
+    min_notional: "5",
+    max_leverage: "1",
+    contract_size: "1",
+    timeframes: ["1h"],
+  },
+];
+export const strategies: Strategy[] = [
+  {
+    key: "atr_strategies/atr_allocation",
+    version: "1.0.0",
+    title: "ATR allocation",
+    description_md: "Demo",
+    instrument_kinds: ["spot"],
+    recommended_timeframes: ["1h"],
+    warmup_bars: 200,
+  },
+  {
+    key: "trend/breakout",
+    version: "1.0.0",
+    title: "Trend breakout",
+    description_md: "Demo",
+    instrument_kinds: ["spot"],
+    recommended_timeframes: ["1h"],
+    warmup_bars: 100,
+  },
+  {
+    key: "mean/reversion",
+    version: "1.0.0",
+    title: "Mean reversion",
+    description_md: "Demo",
+    instrument_kinds: ["spot"],
+    recommended_timeframes: ["1h"],
+    warmup_bars: 50,
+  },
+];
+export const accounts: Account[] = [
+  {
+    id: 7,
+    venue: "binance",
+    label: "Main futures",
+    is_testnet: true,
+    status: "verified",
+    verified_at: "2026-10-22T09:10:00Z",
+    permissions: { trade: true, withdraw: false },
+    credentials_set: true,
+    credential_hint: "…k9Qz",
+    risk: {},
+    kill_switch: {},
+    systems_count: 1,
+    verification_pending: false,
+    probe_error: "",
+    created_at: "2026-10-20T08:00:00Z",
+  },
+  {
+    id: 8,
+    venue: "okx",
+    label: "Invalid account",
+    is_testnet: false,
+    status: "invalid",
+    verified_at: null,
+    permissions: null,
+    credentials_set: true,
+    credential_hint: "…d4Cc",
+    risk: {},
+    kill_switch: {},
+    systems_count: 0,
+    verification_pending: false,
+    probe_error: "Invalid credentials",
+    created_at: "2026-10-20T08:00:00Z",
+  },
+];
+export const systems: TradingSystem[] = [
+  {
+    id: 42,
+    name: "BTC ATR 1h",
+    mode: "live",
+    state: "running",
+    allowed_actions: ["stop", "new_order", "close_position"],
+  },
+  {
+    id: 43,
+    name: "Paper trend",
+    mode: "paper",
+    state: "running",
+    allowed_actions: ["stop", "new_order"],
+  },
+  {
+    id: 44,
+    name: "Stopped mean",
+    mode: "paper",
+    state: "stopped",
+    allowed_actions: ["edit", "delete", "start"],
+  },
+  {
+    id: 45,
+    name: "Halted BTC system",
+    mode: "live",
+    state: "halted",
+    state_reason: "Reconciliation mismatch",
+    allowed_actions: ["ack"],
+  },
+  { id: 46, name: "Errored breakout", mode: "live", state: "error", allowed_actions: ["stop"] },
+  { id: 47, name: "Starting trend", mode: "paper", state: "starting", allowed_actions: ["stop"] },
+];
+export const portfolio = {
+  mode: "live",
+  as_of: "2026-10-22T10:00:00Z",
+  period: "today",
+  buckets: [
+    { currency: "USD*", members: ["USDT", "USDC"], allocation: "12000", value: "12387.40" },
+    { currency: "BTC", members: ["BTC"], allocation: "1", value: "1.02" },
+  ],
+  systems,
+  alerts: [
+    {
+      system: 45,
+      kind: "halted",
+      severity: "error",
+      message: "Reconciliation mismatch",
+      time: "2026-10-22T10:00:00Z",
+    },
+  ],
+};

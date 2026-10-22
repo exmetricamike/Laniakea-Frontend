@@ -86,6 +86,18 @@ async function doRefresh(): Promise<boolean> {
   }
 }
 
+function loginPath(): string {
+  if (typeof window === "undefined") return "/login";
+  const next = `${window.location.pathname}${window.location.search}`;
+  return `/login?next=${encodeURIComponent(next)}`;
+}
+
+function expireSession(): never {
+  clearTokens();
+  if (typeof window !== "undefined") window.location.href = loginPath();
+  throw new ApiError("Session expired", 401, "not_authenticated");
+}
+
 function requestHeaders(init: RequestInit, includeAuthorization: boolean): Headers {
   const headers = new Headers(init.headers);
   if (includeAuthorization) {
@@ -105,14 +117,13 @@ async function request<T>(path: string, init: RequestInit, retry = true): Promis
   } catch {
     throw new ApiError("Network request failed", 0);
   }
-  if (response.status === 401 && retry && getRefresh()) {
+  if (response.status === 401 && retry) {
+    if (!getRefresh()) return expireSession();
     refreshing ??= doRefresh();
     const refreshed = await refreshing;
     refreshing = null;
     if (refreshed) return request<T>(path, init, false);
-    clearTokens();
-    if (typeof window !== "undefined") window.location.href = "/login";
-    throw new ApiError("Session expired", 401);
+    return expireSession();
   }
   if (response.status === 204) return undefined as T;
   const body = await bodyOf(response);
@@ -131,6 +142,22 @@ export const api = {
     request<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
   del: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
+
+export type ApiMethod = "GET" | "POST" | "PATCH" | "DELETE";
+
+export async function apiRequest<T>(
+  method: ApiMethod,
+  path: string,
+  options: { body?: unknown; idempotencyKey?: string } = {},
+): Promise<T> {
+  const headers = new Headers();
+  if (options.idempotencyKey) headers.set("Idempotency-Key", options.idempotencyKey);
+  return request<T>(path, {
+    method,
+    headers,
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+  });
+}
 
 export async function publicRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   let response: Response;
