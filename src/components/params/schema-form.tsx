@@ -44,11 +44,13 @@ export function SchemaForm({
   defaults,
   form,
   serverErrors = {},
+  disabled = false,
 }: {
   schema: ParamsSchema | null | undefined;
   defaults: Record<string, JsonValue>;
   form: UseFormReturn<FormWithParams>;
   serverErrors?: Record<string, string>;
+  disabled?: boolean;
 }) {
   const properties = schema?.properties ?? {};
   return (
@@ -76,6 +78,7 @@ export function SchemaForm({
                   checked={form.getValues().params[name] === true}
                   aria-describedby={errorId}
                   aria-invalid={Boolean(error)}
+                  disabled={disabled}
                   onCheckedChange={(value) =>
                     form.setValue("params", { ...form.getValues().params, [name]: value })
                   }
@@ -102,6 +105,7 @@ export function SchemaForm({
               <Label htmlFor={`param-${name}`}>{name}</Label>
               <Select
                 value={String(form.getValues().params[name] ?? initial ?? "")}
+                disabled={disabled}
                 onValueChange={(value) => {
                   const item = items.find((candidate) => String(candidate) === value) ?? value;
                   form.setValue("params", { ...form.getValues().params, [name]: item });
@@ -148,6 +152,7 @@ export function SchemaForm({
               value={String(form.getValues().params[name] ?? initial ?? "")}
               aria-describedby={errorId}
               aria-invalid={Boolean(error)}
+              disabled={disabled}
               onChange={(event) => {
                 const value = numeric ? Number(event.target.value) : event.target.value;
                 form.setValue("params", { ...form.getValues().params, [name]: value });

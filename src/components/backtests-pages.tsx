@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import Decimal from "decimal.js-light";
 import { Copy, LoaderCircle } from "lucide-react";
@@ -20,13 +20,7 @@ import {
   useStrategyVersion,
   useVenues,
 } from "@/lib/api/queries";
-import type {
-  BacktestJob,
-  BacktestMetric,
-  ChartPayload,
-  CreateBacktestBody,
-  Instrument,
-} from "@/lib/api/types";
+import type { BacktestJob, BacktestMetric, CreateBacktestBody, Instrument } from "@/lib/api/types";
 import {
   type FormWithParams,
   SchemaForm,
@@ -63,6 +57,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { EquityChart, PriceChart } from "@/components/charts";
 
 const metricRows = [
   ["total_return", "Total return", "percent"],
@@ -623,129 +618,6 @@ function Metrics({ job }: { job: BacktestJob }) {
             ))}
           </TableBody>
         </Table>
-      </CardContent>
-    </Card>
-  );
-}
-
-function EquityChart({
-  data,
-}: {
-  data: { t: number[]; value: string[]; drawdown: number[] } | undefined;
-}) {
-  const host = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!host.current || !data || !Array.isArray(data.t) || data.t.length === 0) return;
-    let disposed = false;
-    let dispose: (() => void) | null = null;
-    void import("lightweight-charts").then(({ AreaSeries, LineSeries, createChart }) => {
-      if (!host.current || disposed) return;
-      const chart = createChart(host.current, {
-        autoSize: true,
-        height: 220,
-        layout: { textColor: "#a1a1aa", background: { color: "transparent" } },
-      });
-      const equity = chart.addSeries(LineSeries, { color: "#60a5fa" });
-      equity.setData(
-        data.t.map((time, index) => ({
-          time: (time / 1000) as never,
-          value: Number(data.value[index]),
-        })),
-      );
-      const drawdownPane = chart.addPane();
-      const drawdown = drawdownPane.addSeries(AreaSeries, {
-        lineColor: "#ef4444",
-        topColor: "rgba(239, 68, 68, 0.35)",
-        bottomColor: "rgba(239, 68, 68, 0.05)",
-      });
-      drawdown.setData(
-        data.t.map((time, index) => ({
-          time: (time / 1000) as never,
-          value: -data.drawdown[index] * 100,
-        })),
-      );
-      chart.timeScale().fitContent();
-      dispose = () => chart.remove();
-    });
-    return () => {
-      disposed = true;
-      dispose?.();
-    };
-  }, [data]);
-  const times = Array.isArray(data?.t) ? data.t : [];
-  const first = times[0] ? new Date(times[0]).toISOString() : "";
-  const last = times.at(-1) ? new Date(times.at(-1) as number).toISOString() : "";
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Equity & drawdown</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div
-          ref={host}
-          className="h-[260px] rounded bg-[var(--muted)]"
-          data-points={times.length}
-          data-first={first}
-          data-last={last}
-        />
-        {!times.length ? <p className="mt-2 text-sm">No chart data.</p> : null}
-      </CardContent>
-    </Card>
-  );
-}
-
-function PriceChart({ data }: { data: ChartPayload }) {
-  const host = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!host.current || data.t.length === 0) return;
-    let disposed = false;
-    let dispose: (() => void) | null = null;
-    void import("lightweight-charts").then(
-      ({ CandlestickSeries, createChart, createSeriesMarkers }) => {
-        if (!host.current || disposed) return;
-        const chart = createChart(host.current, {
-          autoSize: true,
-          height: 260,
-          layout: { textColor: "#a1a1aa", background: { color: "transparent" } },
-        });
-        const series = chart.addSeries(CandlestickSeries);
-        series.setData(
-          data.t.map((time, index) => ({
-            time: (time / 1000) as never,
-            open: Number(data.open[index]),
-            high: Number(data.high[index]),
-            low: Number(data.low[index]),
-            close: Number(data.close[index]),
-          })),
-        );
-        createSeriesMarkers(
-          series,
-          data.markers
-            .filter((marker) => data.t.includes(marker.t))
-            .map((marker) => ({
-              time: (marker.t / 1000) as never,
-              position: marker.side === "buy" ? "belowBar" : "aboveBar",
-              color: marker.side === "buy" ? "#22c55e" : "#ef4444",
-              shape: marker.side === "buy" ? "arrowUp" : "arrowDown",
-              text: marker.side === "buy" ? "B" : "S",
-            })),
-        );
-        chart.timeScale().fitContent();
-        dispose = () => chart.remove();
-      },
-    );
-    return () => {
-      disposed = true;
-      dispose?.();
-    };
-  }, [data]);
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Price chart</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div ref={host} className="h-[260px] rounded bg-[var(--muted)]" />
       </CardContent>
     </Card>
   );

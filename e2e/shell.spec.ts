@@ -82,13 +82,92 @@ async function mockMe(page: Page, isStaff = true) {
             engine_revision: "test",
             trades_count: 0,
           }
-        : url.includes("/accounts/3/balance/")
-          ? { balances: [], as_of: null, pending: false, error: "" }
-          : url.endsWith("/accounts/3/")
-            ? account
-            : url.endsWith("/accounts/")
-              ? [account]
-              : { results: [], next: null, count: 0 };
+        : url.endsWith("/systems/42/chart/")
+          ? {
+              t: [],
+              open: [],
+              high: [],
+              low: [],
+              close: [],
+              volume: [],
+              indicators: {},
+              markers: [],
+              open_orders: [],
+            }
+          : url.endsWith("/systems/42/equity/")
+            ? { interval: "1h", t: [], value: [], drawdown: [], realised: [], unrealised: [] }
+            : url.endsWith("/systems/42/performance/")
+              ? {
+                  from: null,
+                  to: null,
+                  metrics: null,
+                  period_pnl: { today: "0", "7d": "0", "30d": "0", all: "0" },
+                  backtest_evidence: [],
+                }
+              : url.endsWith("/systems/42/position/")
+                ? {
+                    size: "0",
+                    side: null,
+                    avg_price: null,
+                    mark_price: null,
+                    marked_at: null,
+                    unrealised_pnl: "0",
+                    venue_size: null,
+                    reconciled_at: null,
+                  }
+                : url.endsWith("/systems/42/")
+                  ? {
+                      id: 42,
+                      name: "BTC ATR 1h",
+                      mode: "paper",
+                      state: "stopped",
+                      instrument: { id: 812, venue: "binance", symbol: "BTC/USDT" },
+                      settle: "USDT",
+                      allocation: "10000",
+                      value: "10000",
+                      net_pnl: "0",
+                      return: 0,
+                      period_pnl: "0",
+                      realised_pnl: "0",
+                      unrealised_pnl: "0",
+                      fees: "0",
+                      max_drawdown: 0,
+                      position: null,
+                      open_orders: 0,
+                      trades: 0,
+                      last_bar_time: null,
+                      heartbeat_at: null,
+                      manual_intervention: false,
+                      allowed_actions: [],
+                      params: {},
+                      risk: {},
+                      cost_model: {
+                        instrument_kind: "spot",
+                        fee_rate: 0,
+                        slippage_bps: 0,
+                        leverage: 1,
+                      },
+                      version: "1.0.0",
+                      strategy: "atr_strategies/atr_allocation",
+                      account: null,
+                      timeframe: "1h",
+                      desired_state: "stopped",
+                      stop_policy: "keep_positions",
+                      state_reason: "",
+                      started_at: null,
+                      stopped_at: null,
+                      meta: { live_capable: true, restart_safe: true, notes: [] },
+                      manual_intervention_at: null,
+                      warmup_bars: 1,
+                      created_at: "2026-10-22T10:00:00Z",
+                    }
+                  : url.includes("/accounts/3/balance/")
+                    ? { balances: [], as_of: null, pending: false, error: "" }
+                    : url.endsWith("/accounts/3/")
+                      ? account
+                      : url.endsWith("/accounts/")
+                        ? [account]
+                        : { results: [], next: null, count: 0 };
     return route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -188,7 +267,7 @@ test("nested placeholders and not-found render", async ({ page }) => {
   await mockMe(page);
   for (const [path, heading] of [
     ["/systems/new", "New system"],
-    ["/systems/42", "System #42"],
+    ["/systems/42", "BTC ATR 1h"],
     ["/strategies/atr_strategies%2Fatr_allocation", "ATR allocation"],
     ["/backtests/new", "New backtest"],
     ["/backtests/7", "atr_strategies/atr_allocation@1.0.0"],

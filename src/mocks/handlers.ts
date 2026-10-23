@@ -369,9 +369,11 @@ export const handlers = [
     );
     return HttpResponse.json(list(filtered));
   }),
-  http.get(`${api}/api/engine/v1/systems/:id/`, ({ params }) =>
-    HttpResponse.json({
-      ...(systemRows.find((item) => item.id === Number(params.id)) ?? systemRows[0]),
+  http.get(`${api}/api/engine/v1/systems/:id/`, ({ params }) => {
+    const system = systemRows.find((item) => item.id === Number(params.id));
+    if (!system) return error("not_found", "Not found.", 404);
+    return HttpResponse.json({
+      ...system,
       strategy: strategies[0].key,
       version: "1.0.0",
       params: {},
@@ -382,13 +384,15 @@ export const handlers = [
       desired_state: "running",
       started_at: "2026-10-22T09:00:00Z",
       stopped_at: null,
-    }),
-  ),
+    });
+  }),
   http.get(`${api}/api/engine/v1/systems/:id/performance/`, () =>
     HttpResponse.json({
-      period_pnl: { today: "12.30" },
-      metrics: { return: 0.04 },
-      backtest_evidence: 1,
+      from: null,
+      to: null,
+      period_pnl: { today: "12.30", "7d": "24.60", "30d": "55.10", all: "87.20" },
+      metrics: { total_return: 0.04, sharpe: 1.4, trades: 14, win_rate: 0.57, profit_factor: 1.8 },
+      backtest_evidence: [{ backtest_id: 1, label: "Published ATR backtest" }],
     }),
   ),
   http.get(`${api}/api/engine/v1/systems/:id/equity/`, () =>
@@ -402,7 +406,24 @@ export const handlers = [
   ),
   http.get(`${api}/api/engine/v1/systems/:id/trades/`, () =>
     HttpResponse.json(
-      list([{ id: 901, status: "open", side: "long", max_size: "0.031", origin: "strategy" }]),
+      list([
+        {
+          id: 901,
+          status: "closed",
+          side: "long",
+          max_size: "0.031",
+          origin: "strategy",
+          opened_at: "2026-10-21T10:00:00Z",
+          closed_at: "2026-10-22T10:00:00Z",
+          entry_avg: "64100",
+          exit_avg: "65220",
+          pnl_gross: "33.71",
+          fees: "1",
+          pnl_net: "32.71",
+          return: 0.02,
+          bars: 24,
+        },
+      ]),
     ),
   ),
   http.get(`${api}/api/engine/v1/systems/:id/orders/`, () =>
@@ -411,12 +432,24 @@ export const handlers = [
         {
           id: 9001,
           client_id: "e42s000137",
+          tag: "TP",
+          origin: "strategy",
+          created_by: null,
           side: "buy",
           type: "limit",
           size: "0.031",
           price: "64000",
+          stop_price: null,
           status: "partial",
           filled_size: "0.010",
+          avg_fill_price: "64000",
+          reject_reason: null,
+          cancelled_by: null,
+          replaces: null,
+          replaced_by: null,
+          bar_time: "2026-10-22T10:00:00Z",
+          created_at: "2026-10-22T10:00:00Z",
+          updated_at: "2026-10-22T10:00:00Z",
           reduce_only: false,
           allowed_actions: ["cancel_order", "modify_order"],
         },
@@ -424,7 +457,22 @@ export const handlers = [
     ),
   ),
   http.get(`${api}/api/engine/v1/systems/:id/fills/`, () =>
-    HttpResponse.json(list([{ id: 1001, order: 9001, size: "0.010", price: "63999.5" }])),
+    HttpResponse.json(
+      list([
+        {
+          id: 1001,
+          order_id: 9001,
+          size: "0.010",
+          price: "63999.5",
+          time: "2026-10-22T10:00:00Z",
+          side: "buy",
+          fee: "0.10",
+          fee_currency: "USDT",
+          liquidity: "maker",
+          origin: "strategy",
+        },
+      ]),
+    ),
   ),
   http.get(`${api}/api/engine/v1/systems/:id/position/`, () =>
     HttpResponse.json({

@@ -79,10 +79,13 @@ export type PaginatedList<T> = { results: T[]; next: string | null; count: numbe
 export type Bucket = Record<string, unknown> & { currency: string; members: string[] };
 export type SystemPosition = {
   size: string;
-  side: "long" | "short";
+  side: "long" | "short" | null;
   avg_price: string | null;
   mark_price: string | null;
   marked_at: string | null;
+  unrealised_pnl?: string;
+  venue_size?: string | null;
+  reconciled_at?: string | null;
 };
 export type SystemRisk = {
   max_order_notional?: string;
@@ -172,6 +175,94 @@ export type ChartSeries = Record<string, unknown> & {
   high: string[];
   low: string[];
   close: string[];
+};
+export type SystemOrder = {
+  id: number;
+  client_id: string;
+  tag: string | null;
+  origin: string;
+  created_by: string | null;
+  side: string;
+  type: string;
+  size: string;
+  price: string | null;
+  stop_price: string | null;
+  reduce_only: boolean;
+  status: string;
+  filled_size: string;
+  avg_fill_price: string | null;
+  reject_reason: string | null;
+  cancelled_by: string | null;
+  replaces: number | null;
+  replaced_by: number | null;
+  bar_time: string | null;
+  created_at: string;
+  updated_at: string;
+  allowed_actions: string[];
+};
+export type SystemTrade = {
+  id: number;
+  side: string;
+  opened_at: string;
+  closed_at: string | null;
+  status: string;
+  max_size: string;
+  entry_avg: string;
+  exit_avg: string | null;
+  pnl_gross: string;
+  fees: string;
+  pnl_net: string;
+  return: number | null;
+  bars: number;
+  origin: string;
+};
+export type SystemFill = {
+  id: number;
+  order_id: number;
+  time: string;
+  side: string;
+  price: string;
+  size: string;
+  fee: string;
+  fee_currency: string | null;
+  liquidity: string | null;
+  origin: string;
+};
+export type SystemPerformance = {
+  from: string | null;
+  to: string | null;
+  metrics: BacktestMetric | null;
+  period_pnl: { today: string; "7d": string; "30d": string; all: string };
+  backtest_evidence: StrategyEvidence[];
+};
+export type SystemEventRow = {
+  id: number;
+  seq: number;
+  time: string;
+  kind: string;
+  severity: string;
+  message: string;
+  data: JsonValue;
+};
+export type SystemCommand = {
+  id: number;
+  system: number;
+  kind: string;
+  payload: JsonValue;
+  status: string;
+  reason: string | null;
+  result: JsonValue;
+  created_by: string | null;
+  created_at: string;
+  finished_at: string | null;
+};
+export type SystemEquity = {
+  interval: string;
+  t: number[];
+  value: string[];
+  drawdown: number[];
+  realised: string[];
+  unrealised: string[];
 };
 export type BacktestStatus = "queued" | "running" | "done" | "failed" | "cancelled";
 export type BacktestMetric = Record<string, number | string | null | undefined>;

@@ -7,12 +7,19 @@ export const queryKeys = {
   },
   system: {
     detail: (id: number) => ["system", id] as const,
-    orders: (id: number, status: string) => ["system", id, "orders", status] as const,
-    trades: (id: number, status: string) => ["system", id, "trades", status] as const,
+    orders: (id: number, filters: object | string) => ["system", id, "orders", filters] as const,
+    trades: (id: number, filters: object | string) => ["system", id, "trades", filters] as const,
     equity: (id: number, range: string) => ["system", id, "equity", range] as const,
     chart: (id: number, range: string) => ["system", id, "chart", range] as const,
-    events: (id: number) => ["system", id, "events"] as const,
-    commands: (id: number) => ["system", id, "commands"] as const,
+    fills: (id: number, filters: object) => ["system", id, "fills", filters] as const,
+    position: (id: number) => ["system", id, "position"] as const,
+    performance: (id: number, range: string) => ["system", id, "performance", range] as const,
+    events: (id: number, filters?: object) =>
+      filters ? (["system", id, "events", filters] as const) : (["system", id, "events"] as const),
+    commands: (id: number, filters?: object) =>
+      filters
+        ? (["system", id, "commands", filters] as const)
+        : (["system", id, "commands"] as const),
   },
   venues: () => ["venues"] as const,
   instruments: (filters: object) => ["instruments", filters] as const,

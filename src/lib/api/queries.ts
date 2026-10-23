@@ -22,6 +22,14 @@ import type {
   StrategyVersionDetail,
   StrategyVersionSummary,
   TradingSystem,
+  SystemCommand,
+  SystemEquity,
+  SystemEventRow,
+  SystemFill,
+  SystemOrder,
+  SystemPerformance,
+  SystemPosition,
+  SystemTrade,
   Venue,
 } from "@/lib/api/types";
 
@@ -78,10 +86,140 @@ export function useSystemsInfinite(filters: SystemsFilters) {
     },
   });
 }
-export function useSystem(id: number) {
+export function useSystem(id: number, options: { poll?: boolean } = {}) {
   return useQuery({
     queryKey: queryKeys.system.detail(id),
     queryFn: () => api.get<TradingSystem>(`/api/engine/v1/systems/${id}/`),
+    enabled: id > 0,
+    refetchInterval: (query) =>
+      options.poll && ["running", "starting", "stopping"].includes(query.state.data?.state ?? "")
+        ? 5_000
+        : false,
+  });
+}
+type SystemQueryOptions = { enabled?: boolean; poll?: boolean };
+function useSystemList<T>(
+  id: number,
+  resource: string,
+  filters: Record<string, string>,
+  key: readonly unknown[],
+  options: SystemQueryOptions,
+) {
+  return useInfiniteQuery({
+    queryKey: key,
+    initialPageParam: "",
+    enabled: options.enabled ?? true,
+    queryFn: ({ pageParam }) =>
+      api.get<PaginatedList<T>>(
+        `/api/engine/v1/systems/${id}/${resource}/${queryString({ ...filters, cursor: String(pageParam) })}`,
+      ),
+    getNextPageParam: (page) =>
+      page.next ? (new URL(page.next).searchParams.get("cursor") ?? undefined) : undefined,
+    refetchInterval: options.poll ? 5_000 : false,
+  });
+}
+export function useSystemOrders(
+  id: number,
+  filters: { status: "open" | "all"; origin?: string },
+  options: SystemQueryOptions = {},
+) {
+  return useSystemList<SystemOrder>(
+    id,
+    "orders",
+    filters,
+    queryKeys.system.orders(id, filters),
+    options,
+  );
+}
+export function useSystemTrades(
+  id: number,
+  filters: { status: "open" | "closed" | "all"; origin?: string },
+  options: SystemQueryOptions = {},
+) {
+  return useSystemList<SystemTrade>(
+    id,
+    "trades",
+    filters,
+    queryKeys.system.trades(id, filters),
+    options,
+  );
+}
+export function useSystemFills(
+  id: number,
+  filters: { origin?: string },
+  options: SystemQueryOptions = {},
+) {
+  return useSystemList<SystemFill>(
+    id,
+    "fills",
+    filters,
+    queryKeys.system.fills(id, filters),
+    options,
+  );
+}
+export function useSystemEvents(
+  id: number,
+  filters: { severity?: string; kind?: string },
+  options: SystemQueryOptions = {},
+) {
+  return useSystemList<SystemEventRow>(
+    id,
+    "events",
+    filters,
+    queryKeys.system.events(id, filters),
+    options,
+  );
+}
+export function useSystemCommands(
+  id: number,
+  filters: { status?: string },
+  options: SystemQueryOptions = {},
+) {
+  return useSystemList<SystemCommand>(
+    id,
+    "commands",
+    filters,
+    queryKeys.system.commands(id, filters),
+    options,
+  );
+}
+export function useSystemPosition(id: number, options: SystemQueryOptions = {}) {
+  return useQuery({
+    queryKey: queryKeys.system.position(id),
+    queryFn: () => api.get<SystemPosition>(`/api/engine/v1/systems/${id}/position/`),
+    enabled: options.enabled ?? true,
+    refetchInterval: options.poll ? 5_000 : false,
+  });
+}
+export function useSystemEquity(id: number, options: SystemQueryOptions = {}) {
+  return useQuery({
+    queryKey: queryKeys.system.equity(id, "default"),
+    queryFn: () => api.get<SystemEquity>(`/api/engine/v1/systems/${id}/equity/`),
+    enabled: options.enabled ?? true,
+    refetchInterval: options.poll ? 5_000 : false,
+  });
+}
+export function useSystemChart(id: number, options: SystemQueryOptions = {}) {
+  return useQuery({
+    queryKey: queryKeys.system.chart(id, "default"),
+    queryFn: () => api.get<ChartPayload>(`/api/engine/v1/systems/${id}/chart/`),
+    enabled: options.enabled ?? true,
+    refetchInterval: options.poll ? 5_000 : false,
+  });
+}
+export function useSystemPerformance(
+  id: number,
+  from: string | undefined,
+  options: SystemQueryOptions = {},
+) {
+  return useQuery({
+    queryKey: queryKeys.system.performance(id, from ?? "all"),
+    queryFn: () =>
+      api.get<SystemPerformance>(
+        `/api/engine/v1/systems/${id}/performance/${queryString({ from })}`,
+      ),
+    enabled: options.enabled ?? true,
+    refetchInterval: options.poll ? 5_000 : false,
   });
 }
 export function useStrategies() {
