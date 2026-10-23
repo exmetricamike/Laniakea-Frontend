@@ -47,11 +47,35 @@ export function usePortfolioSummary(mode: string, period: string) {
       ),
   });
 }
-export function useSystems(filters: { mode?: string }) {
+export type SystemsFilters = {
+  state?: string;
+  mode?: string;
+  account?: number;
+  strategy?: string;
+};
+export function useSystems(filters: SystemsFilters) {
   return useQuery({
     queryKey: queryKeys.systems(filters),
     queryFn: () =>
       api.get<PaginatedList<TradingSystem>>(`/api/engine/v1/systems/${queryString(filters)}`),
+  });
+}
+export function useSystemsInfinite(filters: SystemsFilters) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.systems(filters),
+    initialPageParam: "",
+    queryFn: ({ pageParam }) =>
+      api.get<PaginatedList<TradingSystem>>(
+        `/api/engine/v1/systems/${queryString({ ...filters, cursor: pageParam })}`,
+      ),
+    getNextPageParam: (page) => {
+      if (!page.next) return undefined;
+      return new URL(page.next).searchParams.get("cursor") ?? undefined;
+    },
+    refetchInterval: (query) => {
+      const rows = query.state.data?.pages.flatMap((page) => page.results) ?? [];
+      return rows.some((row) => row.desired_state !== row.state) ? 3_000 : false;
+    },
   });
 }
 export function useSystem(id: number) {

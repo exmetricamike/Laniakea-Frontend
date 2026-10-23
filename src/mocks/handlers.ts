@@ -26,6 +26,8 @@ function saveAccounts(): void {
     sessionStorage.setItem(STORE_KEY, JSON.stringify(accounts));
 }
 let accounts = loadAccounts();
+let systemRows = structuredClone(systems);
+let nextSystemId = Math.max(...systemRows.map((item) => item.id)) + 1;
 let nextAccountId = Math.max(20, ...accounts.map((item) => item.id + 1));
 const verificationPolls = new Map<number, number>();
 const balancePolls = new Map<number, number>();
@@ -82,6 +84,8 @@ export function resetAccountMocks(): void {
   balancePolls.clear();
   failNextVersionDetail = false;
   queuedBacktestPolls = 0;
+  systemRows = structuredClone(systems);
+  nextSystemId = Math.max(...systemRows.map((item) => item.id)) + 1;
 }
 export async function idempotent(
   request: Request,
@@ -354,16 +358,20 @@ export const handlers = [
   ),
   http.get(`${api}/api/engine/v1/systems/`, ({ request }) => {
     const url = new URL(request.url);
-    const filtered = systems.filter(
+    const filtered = systemRows.filter(
       (system) =>
         (!url.searchParams.get("state") || system.state === url.searchParams.get("state")) &&
-        (!url.searchParams.get("mode") || system.mode === url.searchParams.get("mode")),
+        (!url.searchParams.get("mode") || system.mode === url.searchParams.get("mode")) &&
+        (!url.searchParams.get("strategy") ||
+          system.strategy === url.searchParams.get("strategy")) &&
+        (!url.searchParams.get("account") ||
+          String(system.account) === url.searchParams.get("account")),
     );
     return HttpResponse.json(list(filtered));
   }),
   http.get(`${api}/api/engine/v1/systems/:id/`, ({ params }) =>
     HttpResponse.json({
-      ...(systems.find((item) => item.id === Number(params.id)) ?? systems[0]),
+      ...(systemRows.find((item) => item.id === Number(params.id)) ?? systemRows[0]),
       strategy: strategies[0].key,
       version: "1.0.0",
       params: {},
@@ -555,11 +563,58 @@ export const handlers = [
   http.get(`${api}/api/engine/v1/health/`, () =>
     HttpResponse.json({ supervisor: "alive", workers: [], redis: "ok", database: "ok" }),
   ),
-  http.post(`${api}/api/engine/v1/systems/`, () =>
-    HttpResponse.json({ ...systems[2], id: 99 }, { status: 201 }),
-  ),
-  http.patch(`${api}/api/engine/v1/systems/:id/`, () => HttpResponse.json(systems[2])),
+  http.post(`${api}/api/engine/v1/systems/`, async ({ request }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    const params = body.params as Record<string, unknown> | undefined;
+    if (params?.trailing_atr_period === "invalid" || params?.trailing_atr_period === 0) {
+      return HttpResponse.json(
+        {
+          error: {
+            code: "validation_error",
+            message: "Invalid request.",
+            fields: { params: ["trailing_atr_period: 'invalid' is not of type 'integer'"] },
+            reasons: [],
+          },
+        },
+        { status: 400 },
+      );
+    }
+    const instrument =
+      instruments.find((item) => item.id === Number(body.instrument)) ?? instruments[0];
+    const row = {
+      ...systemRows[0],
+      id: nextSystemId++,
+      name: String(body.name ?? "New system"),
+      mode: body.mode === "live" ? ("live" as const) : ("paper" as const),
+      state: "stopped" as const,
+      instrument: { id: instrument.id, venue: instrument.venue, symbol: instrument.symbol },
+      strategy: String(body.strategy ?? strategies[0].key),
+      version: String(body.version ?? "1.0.0"),
+      params: (params ?? {}) as (typeof systemRows)[number]["params"],
+      account: typeof body.account === "number" ? body.account : null,
+      timeframe: String(body.timeframe ?? "1h"),
+      allocation: String(body.allocation ?? "10000"),
+      risk: (body.risk ?? {}) as (typeof systemRows)[number]["risk"],
+      cost_model: (body.cost_model ??
+        systemRows[0].cost_model) as (typeof systemRows)[number]["cost_model"],
+      desired_state: "stopped" as const,
+      allowed_actions: ["edit", "start", "delete"],
+    };
+    systemRows.unshift(row);
+    return HttpResponse.json(row, { status: 201 });
+  }),
+  http.patch(`${api}/api/engine/v1/systems/:id/`, () => HttpResponse.json(systemRows[2])),
   http.delete(`${api}/api/engine/v1/systems/:id/`, () => new HttpResponse(null, { status: 204 })),
+  http.post(`${api}/api/engine/v1/systems/:id/start/`, async ({ params, request }) => {
+    const system = systemRows.find((item) => item.id === Number(params.id));
+    if (!system) return error("not_found", "System not found.", 404);
+    const cached = await idempotent(request, system);
+    if (cached) return cached;
+    system.desired_state = "running";
+    system.state = "running";
+    system.allowed_actions = ["stop", "new_order"];
+    return HttpResponse.json(system, { status: 202 });
+  }),
   http.post(`${api}/api/engine/v1/systems/:id/:action/`, async ({ request }) => {
     const cached = await idempotent(request, command);
     return cached ?? HttpResponse.json(command, { status: 202 });

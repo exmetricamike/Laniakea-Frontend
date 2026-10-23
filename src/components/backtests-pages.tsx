@@ -26,8 +26,12 @@ import type {
   ChartPayload,
   CreateBacktestBody,
   Instrument,
-  ParamsSchema,
 } from "@/lib/api/types";
+import {
+  type FormWithParams,
+  SchemaForm,
+  supportedProperty,
+} from "@/components/params/schema-form";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,7 +45,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -243,81 +246,6 @@ type FormValues = {
   params: Record<string, string | number | boolean | null>;
 };
 
-function supportedProperty(property: Record<string, unknown>): boolean {
-  return (
-    ["integer", "number", "boolean", "string"].includes(String(property.type)) ||
-    Array.isArray(property.enum)
-  );
-}
-
-function ParamsFields({
-  schema,
-  defaults,
-  form,
-}: {
-  schema: ParamsSchema | null | undefined;
-  defaults: Record<string, string | number | boolean | null>;
-  form: ReturnType<typeof useForm<FormValues>>;
-}) {
-  const properties = schema?.properties ?? {};
-  return (
-    <div className="space-y-3">
-      {Object.entries(properties).map(([name, raw]) => {
-        const property = raw as Record<string, unknown>;
-        const initial =
-          defaults[name] ?? (property.default as string | number | boolean | null | undefined);
-        if (!supportedProperty(property))
-          return (
-            <p key={name} role={initial === undefined ? "alert" : undefined}>
-              {initial === undefined
-                ? `This strategy has a parameter the form cannot edit yet: ${name}`
-                : `${name}: uses default`}
-            </p>
-          );
-        if (typeof property.type === "boolean")
-          return (
-            <div key={name} className="flex gap-2">
-              <Switch
-                id={`param-${name}`}
-                checked={Boolean(form.getValues().params[name])}
-                onCheckedChange={(value) =>
-                  form.setValue("params", { ...form.getValues().params, [name]: value })
-                }
-              />
-              <Label htmlFor={`param-${name}`}>{name}</Label>
-            </div>
-          );
-        if (Array.isArray(property.enum))
-          return (
-            <div key={name}>
-              <Label htmlFor={`param-${name}`}>{name}</Label>
-              <select id={`param-${name}`} {...form.register(`params.${name}`)}>
-                {property.enum.map((item) => (
-                  <option key={String(item)} value={String(item)}>
-                    {String(item)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          );
-        return (
-          <div key={name}>
-            <Label htmlFor={`param-${name}`}>{name}</Label>
-            <Input
-              id={`param-${name}`}
-              type={property.type === "string" ? "text" : "number"}
-              min={typeof property.minimum === "number" ? property.minimum : undefined}
-              max={typeof property.maximum === "number" ? property.maximum : undefined}
-              step={property.type === "integer" ? 1 : "any"}
-              {...form.register(`params.${name}`, { valueAsNumber: property.type !== "string" })}
-            />
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 export function NewBacktestPage() {
   const router = useRouter();
   const search = useSearchParams();
@@ -473,7 +401,7 @@ export function NewBacktestPage() {
                 Version: <code>{version}</code>
               </p>
             ) : null}
-            <ParamsFields
+            <SchemaForm
               schema={detail.data?.params_schema}
               defaults={
                 (detail.data?.default_params ?? {}) as Record<
@@ -481,7 +409,7 @@ export function NewBacktestPage() {
                   string | number | boolean | null
                 >
               }
-              form={form}
+              form={form as unknown as import("react-hook-form").UseFormReturn<FormWithParams>}
             />
             <div>
               <Label htmlFor="venue">Venue</Label>

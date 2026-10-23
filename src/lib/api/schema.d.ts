@@ -292,6 +292,230 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/engine/v1/systems/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["engine_systems"];
+    put?: never;
+    post: operations["engine_system_create"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/engine/v1/systems/{system_id}/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["engine_system"];
+    put?: never;
+    post?: never;
+    delete: operations["engine_system_delete"];
+    options?: never;
+    head?: never;
+    patch: operations["engine_system_update"];
+    trace?: never;
+  };
+  "/api/engine/v1/systems/{system_id}/ack/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["engine_system_ack"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/engine/v1/systems/{system_id}/chart/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["engine_system_chart"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/engine/v1/systems/{system_id}/commands/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["engine_system_commands"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/engine/v1/systems/{system_id}/equity/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["engine_system_equity"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/engine/v1/systems/{system_id}/events/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["engine_system_events"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/engine/v1/systems/{system_id}/fills/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["engine_system_fills"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/engine/v1/systems/{system_id}/orders/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["engine_system_orders"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/engine/v1/systems/{system_id}/performance/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["engine_system_performance"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/engine/v1/systems/{system_id}/position/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["engine_system_position"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/engine/v1/systems/{system_id}/start/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["engine_system_start"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/engine/v1/systems/{system_id}/stop/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["engine_system_stop"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/engine/v1/systems/{system_id}/trades/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["engine_system_trades"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/engine/v1/venues/": {
     parameters: {
       query?: never;
@@ -471,6 +695,19 @@ export interface components {
       previous?: string | null;
       results: components["schemas"]["Instrument"][];
     };
+    PaginatedSystemList: {
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?cursor=cD00ODY%3D"
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+       */
+      previous?: string | null;
+      results: components["schemas"]["System"][];
+    };
     PatchedAccountWriteRequest: {
       venue?: string;
       label?: string;
@@ -483,6 +720,62 @@ export interface components {
       /** Format: double */
       max_drawdown_pct?: number | null;
       breaker_policy?: components["schemas"]["BreakerPolicyEnum"];
+    };
+    /** @description Read serializer backed by the reusable systems row builder. */
+    System: {
+      readonly id: number;
+      readonly name: string;
+      readonly mode: string;
+      readonly state: string;
+      readonly instrument: unknown;
+      readonly settle: string;
+      /** Format: decimal */
+      readonly allocation: string;
+      /** Format: decimal */
+      readonly value: string;
+      /** Format: decimal */
+      readonly net_pnl: string;
+      /** Format: double */
+      readonly return: number;
+      /** Format: decimal */
+      readonly period_pnl: string;
+      /** Format: decimal */
+      readonly realised_pnl: string;
+      /** Format: decimal */
+      readonly unrealised_pnl: string;
+      /** Format: decimal */
+      readonly fees: string;
+      /** Format: double */
+      readonly max_drawdown: number;
+      readonly position: unknown;
+      readonly open_orders: number;
+      readonly trades: number;
+      /** Format: date-time */
+      readonly last_bar_time: string | null;
+      /** Format: date-time */
+      readonly heartbeat_at: string | null;
+      readonly manual_intervention: boolean;
+      readonly allowed_actions: string[];
+      readonly params: unknown;
+      readonly risk: unknown;
+      readonly cost_model: unknown;
+      readonly version: string;
+      readonly strategy: string;
+      readonly account: number | null;
+      readonly timeframe: string;
+      readonly desired_state: string;
+      readonly stop_policy: string;
+      readonly state_reason: string;
+      /** Format: date-time */
+      readonly started_at: string | null;
+      /** Format: date-time */
+      readonly stopped_at: string | null;
+      readonly meta: unknown;
+      /** Format: date-time */
+      readonly manual_intervention_at: string | null;
+      readonly warmup_bars: number;
+      /** Format: date-time */
+      readonly created_at: string;
     };
     Version: {
       key: string;
@@ -977,6 +1270,411 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["Version"];
+        };
+      };
+    };
+  };
+  engine_systems: {
+    parameters: {
+      query?: {
+        /** @description The pagination cursor value. */
+        cursor?: string;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PaginatedSystemList"];
+        };
+      };
+    };
+  };
+  engine_system_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": {
+          [key: string]: unknown;
+        };
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["System"];
+        };
+      };
+    };
+  };
+  engine_system: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        system_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["System"];
+        };
+      };
+    };
+  };
+  engine_system_delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        system_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  engine_system_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        system_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": {
+          [key: string]: unknown;
+        };
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["System"];
+        };
+      };
+    };
+  };
+  engine_system_ack: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        system_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": {
+          [key: string]: unknown;
+        };
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["System"];
+        };
+      };
+    };
+  };
+  engine_system_chart: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        system_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  engine_system_commands: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        system_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  engine_system_equity: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        system_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  engine_system_events: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        system_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  engine_system_fills: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        system_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  engine_system_orders: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        system_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  engine_system_performance: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        system_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  engine_system_position: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        system_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  engine_system_start: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        system_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": {
+          [key: string]: unknown;
+        };
+      };
+    };
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["System"];
+        };
+      };
+    };
+  };
+  engine_system_stop: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        system_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": {
+          [key: string]: unknown;
+        };
+      };
+    };
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["System"];
+        };
+      };
+    };
+  };
+  engine_system_trades: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        system_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
         };
       };
     };

@@ -4,7 +4,13 @@ import { useMutation, useQueryClient, type UseMutationOptions } from "@tanstack/
 import { useRef } from "react";
 import { api, apiRequest, ApiError } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/keys";
-import type { Account, BacktestJob, CreateBacktestBody } from "@/lib/api/types";
+import type {
+  Account,
+  BacktestJob,
+  CreateBacktestBody,
+  SystemCreate,
+  TradingSystem,
+} from "@/lib/api/types";
 
 export type IntentKeyState = { key: string };
 export type IntentKeyEvent = "success" | "reset" | "retry";
@@ -99,6 +105,30 @@ export function useCancelBacktest(id: number) {
         void client.invalidateQueries({ queryKey: queryKeys.backtest(id) });
         void client.invalidateQueries({ queryKey: ["backtests"] });
       },
+    },
+  );
+}
+
+export function useCreateSystem() {
+  const client = useQueryClient();
+  return useIdempotentMutation<TradingSystem, SystemCreate>(
+    (body, idempotencyKey) =>
+      apiRequest<TradingSystem>("POST", "/api/engine/v1/systems/", { body, idempotencyKey }),
+    {
+      onSuccess: () => client.invalidateQueries({ queryKey: ["systems"] }),
+    },
+  );
+}
+
+export function useStartSystem(id: number) {
+  const client = useQueryClient();
+  return useIdempotentMutation<TradingSystem, void>(
+    (_, idempotencyKey) =>
+      apiRequest<TradingSystem>("POST", `/api/engine/v1/systems/${id}/start/`, {
+        idempotencyKey,
+      }),
+    {
+      onSuccess: () => client.invalidateQueries({ queryKey: ["systems"] }),
     },
   );
 }

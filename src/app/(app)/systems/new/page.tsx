@@ -1,9 +1,4 @@
-import { PlaceholderPage } from "@/components/placeholder-page";
-import { NewSystemProof } from "@/components/page-wiring";
+import { NewSystemPage as NewSystemContent } from "@/components/systems-pages";
 export default function NewSystemPage() {
-  return (
-    <PlaceholderPage title="New system">
-      <NewSystemProof />
-    </PlaceholderPage>
-  );
+  return <NewSystemContent />;
 }

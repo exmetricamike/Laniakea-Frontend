@@ -76,13 +76,49 @@ export type AccountBalance = {
 };
 export type PaginatedList<T> = { results: T[]; next: string | null; count: number | null };
 
-/** Hand-derived from SPEC §8 until the endpoint exists in the backend schema; replace with generated types when it lands. */
 export type Bucket = Record<string, unknown> & { currency: string; members: string[] };
-export type SystemRow = Record<string, unknown> & {
+export type SystemPosition = {
+  size: string;
+  side: "long" | "short";
+  avg_price: string | null;
+  mark_price: string | null;
+  marked_at: string | null;
+};
+export type SystemRisk = {
+  max_order_notional?: string;
+  max_position_notional?: string;
+  max_leverage?: string;
+  max_orders_per_minute?: number;
+};
+export type SystemCostModel = {
+  instrument_kind: "spot" | "linear_perp";
+  fee_rate: number;
+  slippage_bps: number;
+  leverage: number;
+};
+export type SystemRow = {
   id: number;
   name: string;
-  state: string;
-  mode: string;
+  mode: "paper" | "live";
+  state: "draft" | "stopped" | "starting" | "running" | "stopping" | "error" | "halted";
+  instrument: { id: number; venue: string; symbol: string };
+  settle: string;
+  allocation: string;
+  value: string;
+  net_pnl: string;
+  return: number;
+  period_pnl: string;
+  realised_pnl: string;
+  unrealised_pnl: string;
+  fees: string;
+  max_drawdown: number;
+  position: SystemPosition | null;
+  open_orders: number;
+  trades: number;
+  last_bar_time: string | null;
+  heartbeat_at: string | null;
+  manual_intervention: boolean;
+  allowed_actions: string[];
 };
 export type PortfolioSummary = {
   mode: string;
@@ -92,7 +128,37 @@ export type PortfolioSummary = {
   systems: SystemRow[];
   alerts: unknown[];
 };
-export type TradingSystem = SystemRow & Record<string, unknown>;
+export type TradingSystem = SystemRow & {
+  params: Record<string, JsonValue>;
+  risk: SystemRisk;
+  cost_model: SystemCostModel;
+  version: string;
+  strategy: string;
+  account: number | null;
+  timeframe: string;
+  desired_state: "running" | "stopped";
+  stop_policy: "keep_positions" | "cancel_all" | "flatten";
+  state_reason: string;
+  started_at: string | null;
+  stopped_at: string | null;
+  meta: StrategyMeta;
+  manual_intervention_at: string | null;
+  warmup_bars: number;
+  created_at: string;
+};
+export type SystemCreate = {
+  name: string;
+  mode: "paper" | "live";
+  strategy: string;
+  version: string;
+  params: Record<string, JsonValue>;
+  instrument: number;
+  timeframe: string;
+  account?: number | null;
+  allocation: string;
+  risk: SystemRisk;
+  cost_model: SystemCostModel;
+};
 export type Trade = Record<string, unknown> & { id: number; status: string };
 export type Order = Record<string, unknown> & { id: number; status: string };
 export type Fill = Record<string, unknown> & { id: number };
