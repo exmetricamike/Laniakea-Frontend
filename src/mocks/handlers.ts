@@ -37,8 +37,13 @@ const command = {
   id: 77,
   system: 42,
   kind: "command",
+  payload: {},
   status: "pending",
+  reason: null,
+  result: {},
+  created_by: null,
   created_at: "2026-10-22T10:00:00Z",
+  finished_at: null,
 };
 const backtestJob = {
   id: 1,
@@ -378,7 +383,6 @@ export const handlers = [
       version: "1.0.0",
       params: {},
       risk: {},
-      cost_model: { fee_rate: 0.001 },
       account: 7,
       timeframe: "1h",
       desired_state: "running",
@@ -397,6 +401,7 @@ export const handlers = [
   ),
   http.get(`${api}/api/engine/v1/systems/:id/equity/`, () =>
     HttpResponse.json({
+      interval: "1h",
       t: [1730811600000],
       value: ["2087.40"],
       drawdown: [0],
@@ -491,9 +496,11 @@ export const handlers = [
       list([
         {
           id: 1,
+          seq: 1,
           severity: "warning",
           kind: "reconcile.mismatch",
           message: "Demo event",
+          data: {},
           time: "2026-10-22T10:00:00Z",
         },
       ]),
@@ -507,7 +514,7 @@ export const handlers = [
       low: ["63900"],
       close: ["64050"],
       volume: ["1.2"],
-      indicators: { atr: { pane: "sub", values: [312.4] } },
+      indicators: {},
       markers: [
         {
           t: 1730811600000,

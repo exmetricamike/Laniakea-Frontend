@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { orderLines, snapMarkers, toChartTime } from "@/components/charts";
+import { heartbeatAge } from "@/components/system-detail";
 import type { SystemOrder } from "@/lib/api/types";
 
 const order: SystemOrder = {
@@ -59,5 +60,17 @@ describe("charts", () => {
         { ...order, tag: null, side: "buy", size: "0.5", price: null, stop_price: "55184.49" },
       ]),
     ).toEqual([{ price: "55184.49", label: "buy 0.5 @ 55184.49", dashed: true }]);
+  });
+});
+
+describe("heartbeatAge", () => {
+  it("formats a relative heartbeat age", () => {
+    expect(heartbeatAge("2026-10-26T10:00:00Z", Date.parse("2026-10-26T10:00:12Z"))).toBe(
+      "12 s ago",
+    );
+    expect(heartbeatAge("2026-10-26T10:00:00Z", Date.parse("2026-10-26T10:03:00Z"))).toBe(
+      "3 min ago",
+    );
+    expect(heartbeatAge(null, Date.now())).toBe("—");
   });
 });

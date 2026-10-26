@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import Decimal from "decimal.js-light";
 import { AlertTriangle } from "lucide-react";
@@ -63,6 +63,17 @@ function localTime(value: string | null | undefined): string {
   return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
 }
 
+export function heartbeatAge(value: string | null | undefined, now: number): string {
+  if (!value) return "—";
+  const time = new Date(value).getTime();
+  if (Number.isNaN(time)) return "—";
+  const seconds = Math.max(0, Math.floor((now - time) / 1_000));
+  if (seconds < 60) return `${seconds} s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  return `${Math.floor(minutes / 60)} h ago`;
+}
+
 function periodMs(timeframe: string): number | undefined {
   return {
     "1m": 60_000,
@@ -120,7 +131,9 @@ function Header({ system, now }: { system: TradingSystem; now: number }) {
         <span>Account: {system.account === null ? "—" : <AccountLabel id={system.account} />}</span>
         <span>{system.timeframe}</span>
         <span>Allocation: {money(system.allocation)}</span>
-        <span>Heartbeat: {localTime(system.heartbeat_at)}</span>
+        <span title={system.heartbeat_at ? localTime(system.heartbeat_at) : undefined}>
+          Heartbeat: {heartbeatAge(system.heartbeat_at, now)}
+        </span>
         <span className={stale ? "text-yellow-400" : ""}>
           {stale ? <AlertTriangle className="mr-1 inline size-4" /> : null}
           Last bar: {localTime(system.last_bar_time)}
@@ -673,7 +686,11 @@ export function SystemDetailPage() {
   const { id: rawId } = useParams<{ id: string }>();
   const id = Number(rawId);
   const system = useSystem(id, { poll: true });
-  const [now] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const clock = window.setInterval(() => setNow(Date.now()), 10_000);
+    return () => window.clearInterval(clock);
+  }, []);
   const [showRealised, setShowRealised] = useState(false);
   const [showUnrealised, setShowUnrealised] = useState(false);
   const running = ["running", "starting", "stopping"].includes(system.data?.state ?? "");

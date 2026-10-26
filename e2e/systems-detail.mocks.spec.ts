@@ -18,16 +18,31 @@ test("renders system detail tabs and a not-found page", async ({ page }) => {
     await expect(card).toBeVisible();
   }
   await expect(page.getByText("Position", { exact: true })).toBeVisible();
-  for (const tab of ["Open orders", "Order history", "Trades", "Fills", "Events", "Commands"]) {
+  const activityTabs = [
+    ["Open orders", "TP"],
+    ["Order history", "TP"],
+    ["Trades", "32.71"],
+    ["Fills", "63999.50"],
+    ["Events", "Demo event"],
+    ["Commands", "command"],
+  ];
+  for (const [tab, value] of activityTabs) {
     await page.getByRole("tab", { name: tab }).click();
     await expect(page.getByRole("tab", { name: tab })).toHaveAttribute("data-state", "active");
-    await expect(page.getByRole("tabpanel").locator("tbody tr").first()).toBeVisible();
-    await expect(page.getByRole("tabpanel")).not.toContainText("Loading");
+    const panel = page.getByRole("tabpanel");
+    await expect(panel.locator("tbody tr")).toHaveCount(1);
+    await expect(panel).toContainText(value);
+    await expect(panel.getByRole("alert")).toHaveCount(0);
   }
-  for (const tab of ["Performance", "Settings"]) {
+  for (const [tab, value] of [
+    ["Performance", "Published ATR backtest"],
+    ["Settings", "Risk limits"],
+  ]) {
     await page.getByRole("tab", { name: tab }).click();
     await expect(page.getByRole("tab", { name: tab })).toHaveAttribute("data-state", "active");
-    await expect(page.getByRole("tabpanel")).not.toBeEmpty();
+    const panel = page.getByRole("tabpanel");
+    await expect(panel).toContainText(value);
+    await expect(panel.getByRole("alert")).toHaveCount(0);
   }
   await page.goto("/systems/999999");
   await expect(page.getByRole("heading", { name: "System not found" })).toBeVisible();
