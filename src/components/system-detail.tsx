@@ -8,6 +8,7 @@ import Decimal from "decimal.js-light";
 import { AlertTriangle } from "lucide-react";
 import { EquityChart, PriceChart, orderLines } from "@/components/charts";
 import { ModeBadge } from "@/components/mode-badge";
+import { SystemActions } from "@/components/controls/system-actions";
 import { type FormWithParams, SchemaForm } from "@/components/params/schema-form";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -117,6 +118,7 @@ function Header({ system, now }: { system: TradingSystem; now: number }) {
         {system.manual_intervention_at ? (
           <Badge variant="destructive">Manual intervention</Badge>
         ) : null}
+        <SystemActions system={system} />
       </div>
       {system.state_reason ? (
         <p className="text-sm text-[var(--muted-foreground)]">{system.state_reason}</p>

@@ -29,8 +29,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ModeBadge } from "@/components/mode-badge";
+import { SystemActions } from "@/components/controls/system-actions";
 import { ApiError } from "@/lib/api/client";
-import { useCreateSystem, useStartSystem } from "@/lib/api/mutations";
+import { useCreateSystem } from "@/lib/api/mutations";
 import {
   useAccounts,
   useInstruments,
@@ -44,19 +45,7 @@ import {
 import type { JsonValue, SystemCreate, SystemRisk, TradingSystem } from "@/lib/api/types";
 
 const STEP_NAMES = ["Strategy", "Version", "Parameters", "Instrument", "Mode", "Capital", "Review"];
-const START_BLOCKER_LABELS: Record<string, string> = {
-  version_unpublished: "The strategy version is not published.",
-  params_invalid: "The strategy parameters are invalid.",
-  kill_switch_active: "A kill switch is active.",
-  instrument_kind_mismatch: "The selected instrument kind does not match the strategy.",
-  market_data_unavailable: "Required live market data is unavailable.",
-  account_unverified: "The exchange account is not verified.",
-  account_can_withdraw: "The exchange account can withdraw funds.",
-  risk_limits_missing: "All live risk limits are required.",
-  strategy_not_live_capable: "This strategy is not live-capable.",
-  strategy_not_restart_safe: "This strategy is not restart-safe.",
-  live_runtime_unavailable: "Live trading is not available yet.",
-};
+export { START_BLOCKER_LABELS } from "@/lib/start-blockers";
 
 export type WizardValues = {
   name: string;
@@ -201,9 +190,7 @@ export function SystemsPage() {
 
 function SystemsTable({ rows }: { rows: TradingSystem[] }) {
   return (
-    <Table
-      className="min-w-[1240px] whitespace-nowrap text-xs [&_td]:px-1.5 [&_th]:h-8 [&_th]:px-1.5"
-    >
+    <Table className="min-w-[1240px] whitespace-nowrap text-xs [&_td]:px-1.5 [&_th]:h-8 [&_th]:px-1.5">
       <TableHeader>
         <TableRow>
           <TableHead>Name</TableHead>
@@ -281,6 +268,7 @@ function SystemsTable({ rows }: { rows: TradingSystem[] }) {
               <Link className="underline" href={`/systems/${system.id}`}>
                 Open
               </Link>
+              <SystemActions system={system} />
             </TableCell>
           </TableRow>
         ))}
@@ -364,8 +352,6 @@ export function NewSystemPage() {
   const [serverParams, setServerParams] = useState<string[]>([]);
   const [serverFields, setServerFields] = useState<Record<string, string>>({});
   const [created, setCreated] = useState<TradingSystem | null>(null);
-  const [startError, setStartError] = useState<string[]>([]);
-  const start = useStartSystem(created?.id ?? 0);
   const selected = strategies.data?.results.find((item) => item.key === values.strategy);
   const selectedInstrument = instruments.data?.results.find(
     (item) => item.id === Number(values.instrument),
@@ -445,16 +431,7 @@ export function NewSystemPage() {
       }
     }
   };
-  if (created)
-    return (
-      <CreatedPanel
-        system={created}
-        start={start}
-        startError={startError}
-        setStartError={setStartError}
-        router={router}
-      />
-    );
+  if (created) return <CreatedPanel system={created} router={router} />;
   return (
     <div className="max-w-3xl space-y-6">
       <h1 className="text-2xl font-semibold">New system</h1>
@@ -844,26 +821,11 @@ function ReviewStep({
 }
 function CreatedPanel({
   system,
-  start,
-  startError,
-  setStartError,
   router,
 }: {
   system: TradingSystem;
-  start: ReturnType<typeof useStartSystem>;
-  startError: string[];
-  setStartError: (value: string[]) => void;
   router: ReturnType<typeof useRouter>;
 }) {
-  const startNow = async () => {
-    setStartError([]);
-    try {
-      await start.mutateAsync();
-    } catch (reason) {
-      if (reason instanceof ApiError && Array.isArray(reason.reasons))
-        setStartError(reason.reasons.filter((item): item is string => typeof item === "string"));
-    }
-  };
   return (
     <div className="max-w-xl space-y-4">
       <h1 className="text-2xl font-semibold">Created</h1>
@@ -871,18 +833,7 @@ function CreatedPanel({
         <CardContent className="space-y-4 p-6">
           <p>{system.name} is stopped.</p>
           <Button onClick={() => router.push("/systems")}>Open in list</Button>
-          {system.mode === "paper" ? (
-            <Button variant="outline" disabled={start.isPending} onClick={() => void startNow()}>
-              Start now
-            </Button>
-          ) : null}
-          {startError.length ? (
-            <ul role="alert">
-              {startError.map((code) => (
-                <li key={code}>{START_BLOCKER_LABELS[code] ?? code}</li>
-              ))}
-            </ul>
-          ) : null}
+          {system.allowed_actions.includes("start") ? <SystemActions system={system} /> : null}
         </CardContent>
       </Card>
     </div>

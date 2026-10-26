@@ -406,5 +406,12 @@ export type ChartPayload = {
   open_orders: unknown[];
 };
 export type Backtest = BacktestJob;
-export type KillSwitch = Record<string, unknown> & { active: boolean; scope: string };
+export type KillSwitch = {
+  scope: "global" | "tenant" | "account";
+  target: number | null;
+  active: boolean;
+  reason?: string;
+  set_by: string | null;
+  set_at?: string | null;
+};
 export type WsEnvelope<T> = { type: string; channel: string; seq: number; time: string; data: T };

@@ -1,9 +1,4 @@
-import { PlaceholderPage } from "@/components/placeholder-page";
-import { RiskProof } from "@/components/page-wiring";
+import { RiskPage as RiskContent } from "@/components/risk-page";
 export default function RiskPage() {
-  return (
-    <PlaceholderPage title="Risk">
-      <RiskProof />
-    </PlaceholderPage>
-  );
+  return <RiskContent />;
 }

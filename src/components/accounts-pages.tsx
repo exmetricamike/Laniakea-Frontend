@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { KillSwitchDialog } from "@/components/controls/kill-switch-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -174,8 +175,9 @@ export function AccountsPage() {
                   {account.kill_switch.active ? (
                     <Badge variant="destructive">Kill switch on</Badge>
                   ) : (
-                    "—"
+                    <Badge variant="secondary">Kill switch off</Badge>
                   )}
+                  <AccountKillSwitch account={account} />
                 </TableCell>
                 <TableCell>{new Date(account.created_at).toLocaleDateString()}</TableCell>
               </TableRow>
@@ -184,6 +186,26 @@ export function AccountsPage() {
         </Table>
       )}
     </div>
+  );
+}
+
+function AccountKillSwitch({ account }: { account: Account }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button className="ml-2" size="sm" variant="outline" onClick={() => setOpen(true)}>
+        {account.kill_switch.active ? "Deactivate" : "Activate"}
+      </Button>
+      <KillSwitchDialog
+        key={`account-${account.id}-${open}`}
+        open={open}
+        onOpenChange={setOpen}
+        scope="account"
+        active={account.kill_switch.active}
+        accountId={account.id}
+        label={account.label}
+      />
+    </>
   );
 }
 
@@ -607,7 +629,7 @@ function AccountDetailContent({
           ) : (
             <Badge variant="secondary">Kill switch off</Badge>
           )}
-          <p className="mt-3">Managed on the Risk page (coming soon)</p>
+          <AccountKillSwitch account={current} />
         </CardContent>
       </Card>
       <Card>

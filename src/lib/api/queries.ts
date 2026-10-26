@@ -144,11 +144,11 @@ export function useSystemsInfinite(filters: SystemsFilters) {
     },
   });
 }
-export function useSystem(id: number, options: { poll?: boolean } = {}) {
+export function useSystem(id: number, options: { poll?: boolean; enabled?: boolean } = {}) {
   return useQuery({
     queryKey: queryKeys.system.detail(id),
     queryFn: () => api.get<TradingSystem>(`/api/engine/v1/systems/${id}/`),
-    enabled: id > 0,
+    enabled: id > 0 && (options.enabled ?? true),
     refetchInterval: (query) =>
       options.poll && ["running", "starting", "stopping"].includes(query.state.data?.state ?? "")
         ? 5_000
@@ -431,6 +431,7 @@ export function useKillSwitches() {
       list(
         await api.get<KillSwitch[] | PaginatedList<KillSwitch>>("/api/engine/v1/kill-switches/"),
       ),
+    refetchInterval: 10_000,
   });
 }
 export function useOperatorSystems() {

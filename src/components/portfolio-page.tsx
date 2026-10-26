@@ -7,6 +7,7 @@ import { AlertTriangle } from "lucide-react";
 import { useMode } from "@/components/app-shell";
 import { EquityChart } from "@/components/charts";
 import { ModeBadge } from "@/components/mode-badge";
+import { SystemActions } from "@/components/controls/system-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -195,6 +196,7 @@ function PortfolioSystemsTable({ rows }: { rows: SystemRow[] }) {
                   <Link className="underline" href={`/systems/${system.id}`}>
                     Open
                   </Link>
+                  <SystemActions system={system} />
                 </TableCell>
               </TableRow>
             ))}

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
 import { create } from "zustand";
@@ -21,7 +21,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { clearTokens } from "@/lib/auth";
-import { useMe } from "@/lib/api/queries";
+import { KillSwitchDialog } from "@/components/controls/kill-switch-dialog";
+import { useKillSwitches, useMe, useSystems } from "@/lib/api/queries";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -183,26 +184,22 @@ function UserMenu({ user }: { user: User | null }) {
 }
 
 function TopBar({ user }: { user: User | null }) {
+  const switches = useKillSwitches();
+  const [open, setOpen] = useState(false);
+  const tenant = switches.data?.results.find((item) => item.scope === "tenant");
   return (
     <header className="flex min-h-16 items-center justify-between border-b px-4 md:px-6">
       <ModeToggle />
       <div className="flex items-center gap-2">
-        <Hint text="Available once risk controls are enabled">
-          <span
-            tabIndex={0}
-            className="inline-flex rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-          >
-            <Button
-              variant="outline"
-              size="sm"
-              disabled
-              className="border-red-500 text-red-400 hover:bg-red-500/10 hover:text-red-300"
-            >
-              <OctagonAlert className="size-4" aria-hidden />
-              Kill switch
-            </Button>
-          </span>
-        </Hint>
+        <Button
+          variant={tenant?.active ? "destructive" : "outline"}
+          size="sm"
+          className={!tenant?.active ? "border-red-500 text-red-400" : undefined}
+          onClick={() => setOpen(true)}
+        >
+          <OctagonAlert className="size-4" aria-hidden />
+          {tenant?.active ? "Kill switch ON" : "Kill switch"}
+        </Button>
         <Hint text="No alerts">
           <span
             tabIndex={0}
@@ -223,7 +220,41 @@ function TopBar({ user }: { user: User | null }) {
         </Hint>
         <UserMenu user={user} />
       </div>
+      <KillSwitchDialog
+        key={`tenant-${open}`}
+        open={open}
+        onOpenChange={setOpen}
+        scope="tenant"
+        active={tenant?.active ?? false}
+      />
     </header>
+  );
+}
+
+function HaltBanner() {
+  const switches = useKillSwitches();
+  const halted = useSystems({ state: "halted" });
+  if (switches.isLoading || halted.isLoading) return null;
+  const active = switches.data?.results.filter((item) => item.active) ?? [];
+  const rows = halted.data?.results ?? [];
+  if (!active.length && !rows.length) return null;
+  const only = rows.length === 1 && halted.data?.next === null ? rows[0] : null;
+  return (
+    <div
+      role="alert"
+      className="flex flex-wrap gap-x-4 gap-y-1 border-b border-red-500/50 bg-red-500/10 px-4 py-2 text-sm text-red-200"
+    >
+      {active.map((item) => (
+        <Link key={`${item.scope}-${item.target}`} className="underline" href="/risk">
+          Kill switch active ({item.scope}): new orders blocked
+        </Link>
+      ))}
+      {rows.length ? (
+        <Link className="underline" href={only ? `/systems/${only.id}` : "/systems"}>
+          {only ? `${only.name} is halted` : "Systems are halted"}
+        </Link>
+      ) : null}
+    </div>
   );
 }
 
@@ -240,6 +271,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <Sidebar isStaff={user?.is_staff === true} />
         <div className="min-w-0 flex-1">
           <TopBar user={user ?? null} />
+          <HaltBanner />
           <main className="p-5 md:p-8">{children}</main>
         </div>
       </div>

@@ -27,11 +27,32 @@ function saveAccounts(): void {
 }
 let accounts = loadAccounts();
 let systemRows = structuredClone(systems);
+type MockKillSwitch = {
+  scope: "tenant" | "account" | "global";
+  target: number | null;
+  active: boolean;
+  reason: string;
+  set_by: string | null;
+  set_at: string | null;
+};
+let killSwitchRows: MockKillSwitch[] = [
+  { scope: "tenant" as const, target: null, active: false, reason: "", set_by: null, set_at: null },
+  {
+    scope: "account" as const,
+    target: 7,
+    active: true,
+    reason: "Demo",
+    set_by: "demo@example.test",
+    set_at: "2026-10-22T10:00:00Z",
+  },
+];
 let nextSystemId = Math.max(...systemRows.map((item) => item.id)) + 1;
 let nextAccountId = Math.max(20, ...accounts.map((item) => item.id + 1));
 const verificationPolls = new Map<number, number>();
 const balancePolls = new Map<number, number>();
 let failNextVersionDetail = false;
+let failNextStart = false;
+let blockNextStart = false;
 const list = <T>(results: T[]) => ({ results, next: null, count: results.length });
 function portfolioFixture(): "default" | "large" | "empty" | "paper-only" {
   if (typeof localStorage === "undefined") return "default";
@@ -159,8 +180,21 @@ export function resetAccountMocks(): void {
   verificationPolls.clear();
   balancePolls.clear();
   failNextVersionDetail = false;
+  failNextStart = false;
+  blockNextStart = false;
   queuedBacktestPolls = 0;
   systemRows = structuredClone(systems);
+  killSwitchRows = [
+    { scope: "tenant", target: null, active: false, reason: "", set_by: null, set_at: null },
+    {
+      scope: "account",
+      target: 7,
+      active: true,
+      reason: "Demo",
+      set_by: "demo@example.test",
+      set_at: "2026-10-22T10:00:00Z",
+    },
+  ];
   nextSystemId = Math.max(...systemRows.map((item) => item.id)) + 1;
 }
 export async function idempotent(
@@ -189,6 +223,20 @@ export const handlers = [
   }),
   http.post(`${api}/__mocks/fail-next/strategy-version-detail`, () => {
     failNextVersionDetail = true;
+    return new HttpResponse(null, {
+      status: 204,
+      headers: { "Access-Control-Allow-Origin": "*" },
+    });
+  }),
+  http.post(`${api}/__mocks/fail-next/system-start`, () => {
+    failNextStart = true;
+    return new HttpResponse(null, {
+      status: 204,
+      headers: { "Access-Control-Allow-Origin": "*" },
+    });
+  }),
+  http.post(`${api}/__mocks/fail-next/system-start-blockers`, () => {
+    blockNextStart = true;
     return new HttpResponse(null, {
       status: 204,
       headers: { "Access-Control-Allow-Origin": "*" },
@@ -691,14 +739,7 @@ export const handlers = [
       open_orders: [],
     }),
   ),
-  http.get(`${api}/api/engine/v1/kill-switches/`, () =>
-    HttpResponse.json(
-      list([
-        { scope: "tenant", target: null, active: false },
-        { scope: "account", target: 7, active: true },
-      ]),
-    ),
-  ),
+  http.get(`${api}/api/engine/v1/kill-switches/`, () => HttpResponse.json(list(killSwitchRows))),
   http.get(`${api}/api/engine/v1/operator/systems/`, () => HttpResponse.json(list(systems))),
   http.get(`${api}/api/engine/v1/audit-log/`, () =>
     HttpResponse.json(list([{ id: 1, action: "system.start", time: "2026-10-22T10:00:00Z" }])),
@@ -751,12 +792,53 @@ export const handlers = [
   http.post(`${api}/api/engine/v1/systems/:id/start/`, async ({ params, request }) => {
     const system = systemRows.find((item) => item.id === Number(params.id));
     if (!system) return error("not_found", "System not found.", 404);
+    if (failNextStart) {
+      failNextStart = false;
+      return error("server_error", "Temporary failure.", 500);
+    }
+    if (blockNextStart) {
+      blockNextStart = false;
+      return HttpResponse.json(
+        {
+          error: {
+            code: "precondition_failed",
+            message: "Cannot start.",
+            fields: {},
+            reasons: ["account_unverified", "kill_switch_active"],
+          },
+        },
+        { status: 412 },
+      );
+    }
     const cached = await idempotent(request, system);
     if (cached) return cached;
     system.desired_state = "running";
     system.state = "running";
     system.allowed_actions = ["stop", "new_order"];
     return HttpResponse.json(system, { status: 202 });
+  }),
+  http.post(`${api}/api/engine/v1/systems/:id/stop/`, async ({ params, request }) => {
+    const system = systemRows.find((item) => item.id === Number(params.id));
+    if (!system) return error("not_found", "System not found.", 404);
+    if (system.state !== "running") return error("conflict", "Invalid state.", 409);
+    const body = (await request.clone().json()) as { policy?: string };
+    if (!body.policy) return error("validation_error", "Policy is required.", 400);
+    system.state = "stopped";
+    system.desired_state = "stopped";
+    system.stop_policy = body.policy as typeof system.stop_policy;
+    system.allowed_actions = ["start", "edit", "delete"];
+    return HttpResponse.json(system, { status: 202 });
+  }),
+  http.post(`${api}/api/engine/v1/systems/:id/ack/`, async ({ params, request }) => {
+    const system = systemRows.find((item) => item.id === Number(params.id));
+    if (!system) return error("not_found", "System not found.", 404);
+    const body = (await request.json()) as { note?: string };
+    if (!body.note?.trim()) return error("validation_error", "Note is required.", 400);
+    if (system.state !== "halted") return error("conflict", "Invalid state.", 409);
+    system.state = "stopped";
+    system.desired_state = "stopped";
+    system.allowed_actions = ["start", "edit", "delete"];
+    return HttpResponse.json(system);
   }),
   http.post(`${api}/api/engine/v1/systems/:id/:action/`, async ({ request }) => {
     const cached = await idempotent(request, command);
@@ -775,18 +857,45 @@ export const handlers = [
     return cached ?? HttpResponse.json(command, { status: 202 });
   }),
   http.post(`${api}/api/engine/v1/kill-switches/`, async ({ request }) => {
-    const cached = await idempotent(request, command);
-    return (
-      cached ??
-      HttpResponse.json({ scope: "tenant", active: true, reason: "Demo" }, { status: 202 })
-    );
+    const body = (await request.clone().json()) as {
+      scope: "tenant" | "account";
+      target?: number;
+      active: boolean;
+      reason: string;
+    };
+    const target = body.scope === "account" ? (body.target ?? null) : null;
+    let row = killSwitchRows.find((item) => item.scope === body.scope && item.target === target);
+    if (!row) {
+      row = { scope: body.scope, target, active: false, reason: "", set_by: null, set_at: null };
+      killSwitchRows.push(row);
+    }
+    const cached = await idempotent(request, row);
+    if (cached) return cached;
+    row.active = body.active;
+    row.reason = body.reason;
+    row.set_by = "demo@example.test";
+    row.set_at = "2026-10-22T10:00:00Z";
+    return HttpResponse.json(row);
   }),
   http.post(`${api}/api/engine/v1/kill-switches/global/`, async ({ request }) => {
-    const cached = await idempotent(request, command);
-    return (
-      cached ??
-      HttpResponse.json({ scope: "global", active: true, reason: "Demo" }, { status: 202 })
-    );
+    const body = (await request.json()) as { active: boolean; reason: string };
+    let row = killSwitchRows.find((item) => item.scope === "global");
+    if (!row) {
+      row = {
+        scope: "global",
+        target: null,
+        active: false,
+        reason: "",
+        set_by: null,
+        set_at: null,
+      };
+      killSwitchRows.push(row);
+    }
+    row.active = body.active;
+    row.reason = body.reason;
+    row.set_by = "demo@example.test";
+    row.set_at = "2026-10-22T10:00:00Z";
+    return HttpResponse.json(row);
   }),
   http.post(`${api}/api/engine/v1/backtests/`, async ({ request }) => {
     const body = (await request.clone().json()) as {

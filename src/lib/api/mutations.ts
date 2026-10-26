@@ -10,6 +10,7 @@ import type {
   CreateBacktestBody,
   SystemCreate,
   TradingSystem,
+  KillSwitch,
 } from "@/lib/api/types";
 
 export type IntentKeyState = { key: string };
@@ -127,8 +128,75 @@ export function useStartSystem(id: number) {
       apiRequest<TradingSystem>("POST", `/api/engine/v1/systems/${id}/start/`, {
         idempotencyKey,
       }),
-    {
-      onSuccess: () => client.invalidateQueries({ queryKey: ["systems"] }),
-    },
+    { onSuccess: () => invalidateLifecycle(client, id) },
   );
+}
+
+async function invalidateLifecycle(client: ReturnType<typeof useQueryClient>, id: number) {
+  await Promise.all([
+    client.invalidateQueries({ queryKey: ["systems"] }),
+    client.invalidateQueries({ queryKey: ["portfolio"] }),
+    client.invalidateQueries({ queryKey: queryKeys.system.detail(id) }),
+  ]);
+}
+
+function useRiskInvalidation() {
+  const client = useQueryClient();
+  return async () => {
+    await Promise.all([
+      client.invalidateQueries({ queryKey: queryKeys.risk() }),
+      client.invalidateQueries({ queryKey: ["systems"] }),
+      client.invalidateQueries({ queryKey: ["system"] }),
+      client.invalidateQueries({ queryKey: ["portfolio"] }),
+      client.invalidateQueries({ queryKey: queryKeys.accounts() }),
+      client.invalidateQueries({ queryKey: ["account"] }),
+    ]);
+  };
+}
+
+export function useStopSystem(id: number) {
+  const client = useQueryClient();
+  return useIdempotentMutation<TradingSystem, { policy: TradingSystem["stop_policy"] }>(
+    (body, idempotencyKey) =>
+      apiRequest<TradingSystem>("POST", `/api/engine/v1/systems/${id}/stop/`, {
+        body,
+        idempotencyKey,
+      }),
+    { onSuccess: () => invalidateLifecycle(client, id) },
+  );
+}
+
+export function useAckSystem(id: number) {
+  const client = useQueryClient();
+  return useIdempotentMutation<TradingSystem, { note: string }>(
+    (body, idempotencyKey) =>
+      apiRequest<TradingSystem>("POST", `/api/engine/v1/systems/${id}/ack/`, {
+        body,
+        idempotencyKey,
+      }),
+    { onSuccess: () => invalidateLifecycle(client, id) },
+  );
+}
+
+export function useSetKillSwitch() {
+  const invalidate = useRiskInvalidation();
+  return useIdempotentMutation<
+    KillSwitch,
+    { scope: "tenant" | "account"; target?: number; active: boolean; reason: string }
+  >(
+    (body, idempotencyKey) =>
+      apiRequest<KillSwitch>("POST", "/api/engine/v1/kill-switches/", {
+        body,
+        idempotencyKey,
+      }),
+    { onSuccess: invalidate },
+  );
+}
+
+export function useSetGlobalKillSwitch() {
+  const invalidate = useRiskInvalidation();
+  return useMutation<KillSwitch, ApiError, { active: boolean; reason: string }>({
+    mutationFn: (body) => api.post<KillSwitch>("/api/engine/v1/kill-switches/global/", body),
+    onSuccess: invalidate,
+  });
 }
