@@ -228,6 +228,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/engine/v1/kill-switches/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["engine_kill_switches"];
+    put?: never;
+    post: operations["engine_kill_switch_set"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/engine/v1/kill-switches/global/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["engine_global_kill_switch_set"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/engine/v1/portfolio/equity/": {
     parameters: {
       query?: never;
@@ -452,6 +484,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/engine/v1/systems/{system_id}/close-position/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["systems_close_position_create"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/engine/v1/systems/{system_id}/commands/": {
     parameters: {
       query?: never;
@@ -525,11 +573,27 @@ export interface paths {
     };
     get: operations["engine_system_orders"];
     put?: never;
-    post?: never;
+    post: operations["systems_orders_create"];
     delete?: never;
     options?: never;
     head?: never;
     patch?: never;
+    trace?: never;
+  };
+  "/api/engine/v1/systems/{system_id}/orders/{order_id}/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete: operations["systems_orders_destroy"];
+    options?: never;
+    head?: never;
+    patch: operations["systems_orders_partial_update"];
     trace?: never;
   };
   "/api/engine/v1/systems/{system_id}/performance/": {
@@ -752,6 +816,10 @@ export interface components {
      * @enum {string}
      */
     BreakerPolicyEnum: "cancel_orders" | "flatten";
+    GlobalKillSwitchWriteRequest: {
+      active: boolean;
+      reason: string;
+    };
     Instrument: {
       id: number;
       venue: string;
@@ -772,6 +840,35 @@ export interface components {
       contract_size: string | null;
       timeframes?: unknown;
     };
+    KillSwitch: {
+      scope: components["schemas"]["KillSwitchScopeEnum"];
+      readonly target: number;
+      active: boolean;
+      reason?: string;
+      /** Format: email */
+      readonly set_by: string;
+      /** Format: date-time */
+      set_at?: string;
+    };
+    /**
+     * @description * `global` - Global
+     *     * `tenant` - Tenant
+     *     * `account` - Account
+     * @enum {string}
+     */
+    KillSwitchScopeEnum: "global" | "tenant" | "account";
+    KillSwitchWriteRequest: {
+      scope: components["schemas"]["KillSwitchWriteScopeEnum"];
+      target?: number | null;
+      active: boolean;
+      reason: string;
+    };
+    /**
+     * @description * `tenant` - tenant
+     *     * `account` - account
+     * @enum {string}
+     */
+    KillSwitchWriteScopeEnum: "tenant" | "account";
     /**
      * @description * `spot` - Spot
      *     * `linear_perp` - Linear Perp
@@ -1278,6 +1375,71 @@ export interface operations {
       };
     };
   };
+  engine_kill_switches: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["KillSwitch"][];
+        };
+      };
+    };
+  };
+  engine_kill_switch_set: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["KillSwitchWriteRequest"];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["KillSwitch"];
+        };
+      };
+    };
+  };
+  engine_global_kill_switch_set: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["GlobalKillSwitchWriteRequest"];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["KillSwitch"];
+        };
+      };
+    };
+  };
   engine_portfolio_equity: {
     parameters: {
       query?: never;
@@ -1663,6 +1825,26 @@ export interface operations {
       };
     };
   };
+  systems_close_position_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        system_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   engine_system_commands: {
     parameters: {
       query?: never;
@@ -1775,6 +1957,68 @@ export interface operations {
             [key: string]: unknown;
           };
         };
+      };
+    };
+  };
+  systems_orders_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        system_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  systems_orders_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        order_id: number;
+        system_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  systems_orders_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        order_id: number;
+        system_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
