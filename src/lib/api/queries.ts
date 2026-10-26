@@ -18,6 +18,10 @@ import type {
   KillSwitch,
   PaginatedList,
   PortfolioSummary,
+  PortfolioEquity,
+  PortfolioOrder,
+  PortfolioPosition,
+  PortfolioTrade,
   StrategySummary,
   StrategyVersionDetail,
   StrategyVersionSummary,
@@ -46,12 +50,66 @@ function list<T>(value: T[] | PaginatedList<T>): PaginatedList<T> {
   return Array.isArray(value) ? { results: value, next: null, count: value.length } : value;
 }
 
-export function usePortfolioSummary(mode: string, period: string) {
+export function usePortfolioSummary(mode: string, period: string, includeStopped: boolean) {
   return useQuery({
-    queryKey: queryKeys.portfolio.summary(mode, period),
+    queryKey: queryKeys.portfolio.summary(mode, period, includeStopped),
     queryFn: () =>
       api.get<PortfolioSummary>(
-        `/api/engine/v1/portfolio/summary/${queryString({ mode, period })}`,
+        `/api/engine/v1/portfolio/summary/${queryString({
+          mode,
+          period,
+          include_stopped: includeStopped ? "true" : "false",
+        })}`,
+      ),
+    refetchInterval: 10_000,
+  });
+}
+export function usePortfolioEquity(mode: string, from: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.portfolio.equity(mode, from ?? "all"),
+    queryFn: () =>
+      api.get<PortfolioEquity>(
+        `/api/engine/v1/portfolio/equity/${queryString({ mode, from, interval: "1h" })}`,
+      ),
+    refetchInterval: 60_000,
+  });
+}
+export type PortfolioTradeFilters = {
+  mode: "paper" | "live";
+  system?: string;
+  side?: string;
+  origin?: string;
+  status?: "open" | "closed" | "all";
+};
+export function usePortfolioTradesInfinite(filters: PortfolioTradeFilters, refreshKey = 0) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.portfolio.trades({ ...filters, refreshKey }),
+    initialPageParam: "",
+    queryFn: ({ pageParam }) =>
+      api.get<PaginatedList<PortfolioTrade>>(
+        `/api/engine/v1/portfolio/trades/${queryString({ ...filters, cursor: String(pageParam) })}`,
+      ),
+    getNextPageParam: (page) =>
+      page.next ? (new URL(page.next).searchParams.get("cursor") ?? undefined) : undefined,
+    refetchInterval: (query) => (query.state.data?.pages.length === 1 ? 10_000 : false),
+  });
+}
+export function usePortfolioOrders(mode: "paper" | "live") {
+  return useQuery({
+    queryKey: queryKeys.portfolio.orders(mode),
+    queryFn: () =>
+      api.get<PaginatedList<PortfolioOrder>>(
+        `/api/engine/v1/portfolio/orders/${queryString({ mode, status: "open" })}`,
+      ),
+    refetchInterval: 10_000,
+  });
+}
+export function usePortfolioPositions(mode: "paper" | "live") {
+  return useQuery({
+    queryKey: queryKeys.portfolio.positions(mode),
+    queryFn: () =>
+      api.get<PaginatedList<PortfolioPosition>>(
+        `/api/engine/v1/portfolio/positions/${queryString({ mode })}`,
       ),
   });
 }

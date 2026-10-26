@@ -33,6 +33,77 @@ const verificationPolls = new Map<number, number>();
 const balancePolls = new Map<number, number>();
 let failNextVersionDetail = false;
 const list = <T>(results: T[]) => ({ results, next: null, count: results.length });
+function portfolioFixture(): "default" | "large" | "empty" | "paper-only" {
+  if (typeof localStorage === "undefined") return "default";
+  const value = localStorage.getItem("laniakea.mocks.portfolio");
+  return value === "large" || value === "empty" || value === "paper-only" ? value : "default";
+}
+function largeSystems() {
+  return Array.from({ length: 50 }, (_, index) => ({
+    ...systems[index % systems.length],
+    id: 1_000 + index,
+    name: `Large system ${index + 1}`,
+    mode: "paper" as const,
+    state: index === 0 ? ("halted" as const) : ("running" as const),
+  }));
+}
+function fixtureSystems() {
+  const fixture = portfolioFixture();
+  if (fixture === "empty") return [];
+  if (fixture === "large") return largeSystems();
+  if (fixture === "paper-only") return systemRows.filter((system) => system.mode === "paper");
+  return systemRows;
+}
+const portfolioTrades = [
+  {
+    id: 902,
+    system: { id: 43, name: "Paper trend" },
+    instrument: { id: 812, symbol: "BTC/USDT" },
+    side: "long",
+    status: "open",
+    opened_at: "2026-10-22T10:00:00Z",
+    closed_at: null,
+    max_size: "0.031",
+    entry_avg: "64100",
+    exit_avg: null,
+    pnl_gross: "34.20",
+    fees: "1.49",
+    pnl_net: "32.71",
+    return: 0.0164,
+    bars: 14,
+    origin: "strategy",
+    has_manual_fills: false,
+    tags: ["breakout"],
+  },
+  {
+    id: 901,
+    system: { id: 43, name: "Paper trend" },
+    instrument: { id: 812, symbol: "BTC/USDT" },
+    side: "long",
+    status: "closed",
+    opened_at: "2026-10-21T10:00:00Z",
+    closed_at: "2026-10-22T10:00:00Z",
+    max_size: "0.031",
+    entry_avg: "64100",
+    exit_avg: "65220",
+    pnl_gross: "34.20",
+    fees: "1.49",
+    pnl_net: "32.71",
+    return: 0.0164,
+    bars: 14,
+    origin: "strategy",
+    has_manual_fills: false,
+    tags: [],
+  },
+];
+function fixtureTrades() {
+  if (portfolioFixture() !== "large") return portfolioTrades;
+  return Array.from({ length: 5_000 }, (_, index) => ({
+    ...portfolioTrades[index % portfolioTrades.length],
+    id: 10_000 - index,
+    system: { id: 1_000 + (index % 50), name: `Large system ${(index % 50) + 1}` },
+  }));
+}
 const command = {
   id: 77,
   system: 42,
@@ -287,59 +358,60 @@ export const handlers = [
   http.get(`${api}/api/engine/v1/portfolio/summary/`, ({ request }) => {
     // SPEC §7.4: live and paper are never summed together; the summary is per mode.
     const mode = new URL(request.url).searchParams.get("mode") ?? "live";
+    const fixture = portfolioFixture();
+    const rows = fixtureSystems().filter((system) => system.mode === mode);
     return HttpResponse.json({
       ...portfolio,
       mode,
-      systems: portfolio.systems.filter((system) => system.mode === mode),
+      systems: rows,
+      buckets: fixture === "empty" || rows.length === 0 ? [] : portfolio.buckets,
+      alerts: portfolio.alerts.filter((alert) => rows.some((system) => system.id === alert.system)),
     });
   }),
   http.get(`${api}/api/engine/v1/portfolio/equity/`, () =>
     HttpResponse.json({
       interval: "1h",
-      buckets: [
-        {
-          currency: "USD*",
-          t: [1730811600000],
-          value: ["12387.40"],
-          drawdown: [0],
-          allocation: ["12000"],
-        },
-      ],
+      buckets:
+        portfolioFixture() === "empty"
+          ? []
+          : [
+              {
+                currency: "USD*",
+                t: [1730811600000],
+                value: ["12387.40"],
+                drawdown: [0],
+                allocation: ["12000"],
+              },
+            ],
     }),
   ),
-  http.get(`${api}/api/engine/v1/portfolio/trades/`, () =>
-    HttpResponse.json(
-      list([
-        {
-          id: 901,
-          system: { id: 42, name: "BTC ATR 1h" },
-          instrument: { id: 812, symbol: "BTC/USDT" },
-          side: "long",
-          status: "closed",
-          opened_at: "2026-10-21T10:00:00Z",
-          closed_at: "2026-10-22T10:00:00Z",
-          max_size: "0.031",
-          entry_avg: "64100",
-          exit_avg: "65220",
-          pnl_net: "32.71",
-          origin: "strategy",
-        },
-      ]),
-    ),
-  ),
+  http.get(`${api}/api/engine/v1/portfolio/trades/`, ({ request }) => {
+    const rows = portfolioFixture() === "empty" ? [] : fixtureTrades();
+    const cursor = Number(new URL(request.url).searchParams.get("cursor") ?? "0");
+    const start = Number.isFinite(cursor) ? cursor : 0;
+    const results = rows.slice(start, start + 50);
+    const next =
+      start + 50 < rows.length
+        ? `${api}/api/engine/v1/portfolio/trades/?cursor=${start + 50}`
+        : null;
+    return HttpResponse.json({ results, next, count: null });
+  }),
   http.get(`${api}/api/engine/v1/portfolio/orders/`, () =>
     HttpResponse.json(
-      list([
-        {
-          id: 9001,
-          side: "buy",
-          type: "limit",
-          size: "0.031",
-          price: "64000",
-          status: "partial",
-          filled_size: "0.010",
-        },
-      ]),
+      portfolioFixture() === "empty"
+        ? list([])
+        : list([
+            {
+              id: 9001,
+              side: "buy",
+              type: "limit",
+              size: "0.031",
+              price: "64000",
+              status: "partial",
+              filled_size: "0.010",
+              system: { id: 43, name: "Paper trend" },
+            },
+          ]),
     ),
   ),
   http.get(`${api}/api/engine/v1/portfolio/fills/`, () =>
@@ -358,12 +430,28 @@ export const handlers = [
   ),
   http.get(`${api}/api/engine/v1/portfolio/positions/`, () =>
     HttpResponse.json(
-      list([{ system: 42, size: "0.031", side: "long", avg_price: "64100", mark_price: "64945" }]),
+      portfolioFixture() === "empty"
+        ? list([])
+        : list([
+            {
+              system: { id: 43, name: "Paper trend", mode: "paper" },
+              instrument: { id: 812, venue: "binance", symbol: "BTC/USDT" },
+              settle: "USDT",
+              size: "0.031",
+              side: "long",
+              avg_price: "64100",
+              mark_price: "64945",
+              marked_at: "2026-10-22T10:00:00Z",
+              unrealised_pnl: "0",
+              venue_size: null,
+              reconciled_at: null,
+            },
+          ]),
     ),
   ),
   http.get(`${api}/api/engine/v1/systems/`, ({ request }) => {
     const url = new URL(request.url);
-    const filtered = systemRows.filter(
+    const filtered = fixtureSystems().filter(
       (system) =>
         (!url.searchParams.get("state") || system.state === url.searchParams.get("state")) &&
         (!url.searchParams.get("mode") || system.mode === url.searchParams.get("mode")) &&

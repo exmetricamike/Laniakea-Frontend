@@ -3,11 +3,12 @@ import { queryKeys } from "@/lib/api/keys";
 
 describe("query keys", () => {
   it("returns the canonical §11.3 arrays", () => {
-    expect(queryKeys.portfolio.summary("live", "today")).toEqual([
+    expect(queryKeys.portfolio.summary("live", "today", false)).toEqual([
       "portfolio",
       "summary",
       "live",
       "today",
+      false,
     ]);
     expect(queryKeys.portfolio.equity("paper", "7d")).toEqual([
       "portfolio",

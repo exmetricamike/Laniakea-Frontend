@@ -76,7 +76,22 @@ export type AccountBalance = {
 };
 export type PaginatedList<T> = { results: T[]; next: string | null; count: number | null };
 
-export type Bucket = Record<string, unknown> & { currency: string; members: string[] };
+export type PortfolioBucket = {
+  currency: string;
+  members: string[];
+  allocation: string;
+  value: string;
+  net_pnl: string;
+  return: number | null;
+  realised_pnl: string;
+  unrealised_pnl: string;
+  fees: string;
+  period_pnl: string;
+  max_drawdown: number | null;
+  systems: number;
+  open_positions: number;
+  open_orders: number;
+};
 export type SystemPosition = {
   size: string;
   side: "long" | "short" | null;
@@ -124,12 +139,29 @@ export type SystemRow = {
   allowed_actions: string[];
 };
 export type PortfolioSummary = {
-  mode: string;
+  mode: "paper" | "live";
   as_of: string;
-  period: string;
-  buckets: Bucket[];
+  period: PortfolioPeriod;
+  buckets: PortfolioBucket[];
   systems: SystemRow[];
-  alerts: unknown[];
+  alerts: PortfolioAlert[];
+};
+export type PortfolioPeriod = "today" | "7d" | "30d" | "all";
+export type PortfolioAlert = {
+  system: number;
+  kind: "halted" | "error";
+  message: string;
+  time: string;
+};
+export type PortfolioEquity = {
+  interval: "15m" | "1h" | "4h" | "1d";
+  buckets: Array<{
+    currency: string;
+    t: number[];
+    value: string[];
+    drawdown: number[];
+    allocation: string[];
+  }>;
 };
 export type TradingSystem = SystemRow & {
   params: Record<string, JsonValue>;
@@ -215,6 +247,18 @@ export type SystemTrade = {
   return: number | null;
   bars: number;
   origin: string;
+};
+export type PortfolioTrade = SystemTrade & {
+  system: { id: number; name: string };
+  instrument: { id: number; symbol: string };
+  has_manual_fills: boolean;
+  tags: JsonValue[];
+};
+export type PortfolioOrder = SystemOrder & { system: { id: number; name: string } };
+export type PortfolioPosition = SystemPosition & {
+  system: { id: number; name: string; mode: "paper" | "live" };
+  instrument: { id: number; venue: string; symbol: string };
+  settle: string;
 };
 export type SystemFill = {
   id: number;

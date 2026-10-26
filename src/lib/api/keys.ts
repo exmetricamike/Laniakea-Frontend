@@ -1,9 +1,11 @@
 export const queryKeys = {
   portfolio: {
-    summary: (mode: string, period: string) => ["portfolio", "summary", mode, period] as const,
+    summary: (mode: string, period: string, includeStopped: boolean) =>
+      ["portfolio", "summary", mode, period, includeStopped] as const,
     equity: (mode: string, range: string) => ["portfolio", "equity", mode, range] as const,
     trades: (filters: object) => ["portfolio", "trades", filters] as const,
     orders: (mode: string) => ["portfolio", "orders", mode] as const,
+    positions: (mode: string) => ["portfolio", "positions", mode] as const,
   },
   system: {
     detail: (id: number) => ["system", id] as const,

@@ -1,9 +1,4 @@
-import { PlaceholderPage } from "@/components/placeholder-page";
-import { PortfolioProof } from "@/components/page-wiring";
+import { PortfolioPage as PortfolioContent } from "@/components/portfolio-page";
 export default function PortfolioPage() {
-  return (
-    <PlaceholderPage title="Portfolio">
-      <PortfolioProof />
-    </PlaceholderPage>
-  );
+  return <PortfolioContent />;
 }

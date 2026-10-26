@@ -17,7 +17,7 @@ import {
 
 export function PortfolioProof() {
   const mode = useMode((state) => state.mode);
-  const query = usePortfolioSummary(mode, "today");
+  const query = usePortfolioSummary(mode, "today", false);
   return (
     <DataProof {...query}>
       {query.data?.buckets?.length ?? 0} buckets · {query.data?.systems?.length ?? 0} systems
