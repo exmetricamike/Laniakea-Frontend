@@ -300,6 +300,20 @@ export type SystemCommand = {
   created_at: string;
   finished_at: string | null;
 };
+export type CommandStatus = "pending" | "executing" | "done" | "rejected";
+export type ManualOrder = {
+  side: "buy" | "sell";
+  type: "market" | "limit" | "stop" | "stop_limit";
+  size?: string;
+  notional?: string;
+  price?: string;
+  stop_price?: string;
+  reduce_only: boolean;
+};
+export type ModifyOrder = { size: string; price?: string; stop_price?: string };
+export type SystemUpdate = Partial<
+  Pick<TradingSystem, "params" | "risk" | "cost_model" | "allocation">
+>;
 export type SystemEquity = {
   interval: string;
   t: number[];

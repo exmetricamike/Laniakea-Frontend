@@ -9,6 +9,7 @@ import {
   systems,
   venues,
 } from "@/mocks/fixtures/data";
+import type { SystemOrder } from "@/lib/api/types";
 
 const api = "http://localhost:8000";
 const replay = new Map<string, { body: string; response: unknown }>();
@@ -27,6 +28,44 @@ function saveAccounts(): void {
 }
 let accounts = loadAccounts();
 let systemRows = structuredClone(systems);
+let orderRows: SystemOrder[] = [
+  {
+    id: 9001,
+    client_id: "e42s000137",
+    tag: "TP",
+    origin: "strategy",
+    created_by: null,
+    side: "buy",
+    type: "limit",
+    size: "0.031",
+    price: "64000",
+    stop_price: null,
+    status: "partial",
+    filled_size: "0.010",
+    avg_fill_price: "64000",
+    reject_reason: null,
+    cancelled_by: null,
+    replaces: null,
+    replaced_by: null,
+    bar_time: "2026-10-22T10:00:00Z",
+    created_at: "2026-10-22T10:00:00Z",
+    updated_at: "2026-10-22T10:00:00Z",
+    reduce_only: false,
+    allowed_actions: ["cancel_order", "modify_order"],
+  },
+];
+let commandRows: Array<Record<string, unknown>> = [];
+let commandPolls = new Map<number, number>();
+let positionRow = {
+  size: "0.031",
+  side: "long" as "long" | "short" | null,
+  avg_price: "64100",
+  mark_price: "64945",
+  marked_at: "2026-10-22T10:00:00Z",
+  unrealised_pnl: "12.30",
+  venue_size: "0.031",
+  reconciled_at: "2026-10-22T10:00:00Z",
+};
 type MockKillSwitch = {
   scope: "tenant" | "account" | "global";
   target: number | null;
@@ -137,6 +176,19 @@ const command = {
   created_at: "2026-10-22T10:00:00Z",
   finished_at: null,
 };
+function createCommand(kind: string, payload: Record<string, unknown>) {
+  const row = {
+    ...command,
+    id: 100 + commandRows.length,
+    kind,
+    payload,
+    status: "pending",
+    reason: null as string | null,
+    result: {} as Record<string, unknown>,
+  };
+  commandRows.unshift(row);
+  return row;
+}
 const backtestJob = {
   id: 1,
   strategy: "atr_strategies/atr_allocation",
@@ -567,36 +619,7 @@ export const handlers = [
       ]),
     ),
   ),
-  http.get(`${api}/api/engine/v1/systems/:id/orders/`, () =>
-    HttpResponse.json(
-      list([
-        {
-          id: 9001,
-          client_id: "e42s000137",
-          tag: "TP",
-          origin: "strategy",
-          created_by: null,
-          side: "buy",
-          type: "limit",
-          size: "0.031",
-          price: "64000",
-          stop_price: null,
-          status: "partial",
-          filled_size: "0.010",
-          avg_fill_price: "64000",
-          reject_reason: null,
-          cancelled_by: null,
-          replaces: null,
-          replaced_by: null,
-          bar_time: "2026-10-22T10:00:00Z",
-          created_at: "2026-10-22T10:00:00Z",
-          updated_at: "2026-10-22T10:00:00Z",
-          reduce_only: false,
-          allowed_actions: ["cancel_order", "modify_order"],
-        },
-      ]),
-    ),
-  ),
+  http.get(`${api}/api/engine/v1/systems/:id/orders/`, () => HttpResponse.json(list(orderRows))),
   http.get(`${api}/api/engine/v1/systems/:id/fills/`, () =>
     HttpResponse.json(
       list([
@@ -615,18 +638,7 @@ export const handlers = [
       ]),
     ),
   ),
-  http.get(`${api}/api/engine/v1/systems/:id/position/`, () =>
-    HttpResponse.json({
-      size: "0.031",
-      side: "long",
-      avg_price: "64100",
-      mark_price: "64945",
-      marked_at: "2026-10-22T10:00:00Z",
-      unrealised_pnl: "12.30",
-      venue_size: "0.031",
-      reconciled_at: "2026-10-22T10:00:00Z",
-    }),
-  ),
+  http.get(`${api}/api/engine/v1/systems/:id/position/`, () => HttpResponse.json(positionRow)),
   http.get(`${api}/api/engine/v1/systems/:id/events/`, () =>
     HttpResponse.json(
       list([
@@ -674,9 +686,17 @@ export const handlers = [
       ],
     }),
   ),
-  http.get(`${api}/api/engine/v1/systems/:id/commands/`, () =>
-    HttpResponse.json(list([{ ...command, status: "done", reason: null, result: {} }])),
-  ),
+  http.get(`${api}/api/engine/v1/systems/:id/commands/`, () => {
+    commandRows.forEach((row) => {
+      const count = (commandPolls.get(Number(row.id)) ?? 0) + 1;
+      commandPolls.set(Number(row.id), count);
+      if (row.status === "pending" && count >= 2) row.status = "executing";
+      if (row.status === "executing" && count >= 3) row.status = "done";
+    });
+    return HttpResponse.json(
+      list(commandRows.length ? commandRows : [{ ...command, status: "done" }]),
+    );
+  }),
   http.get(`${api}/api/engine/v1/systems/:id/shadow-reports/`, () => HttpResponse.json(list([]))),
   http.get(`${api}/api/engine/v1/backtests/`, () => HttpResponse.json(list([backtestJob]))),
   http.get(`${api}/api/engine/v1/backtests/:id/`, ({ params }) => {
@@ -787,7 +807,21 @@ export const handlers = [
     systemRows.unshift(row);
     return HttpResponse.json(row, { status: 201 });
   }),
-  http.patch(`${api}/api/engine/v1/systems/:id/`, () => HttpResponse.json(systemRows[2])),
+  http.patch(`${api}/api/engine/v1/systems/:id/`, async ({ params, request }) => {
+    const system = systemRows.find((item) => item.id === Number(params.id));
+    if (!system) return error("not_found", "Not found.", 404);
+    if (system.state !== "stopped")
+      return error("invalid_state", "System is no longer stopped", 409);
+    const body = (await request.json()) as Record<string, unknown>;
+    if ((body.params as Record<string, unknown> | undefined)?.trailing_atr_period === 0) {
+      return HttpResponse.json(
+        { error: { fields: { params: ["trailing_atr_period: invalid"] } } },
+        { status: 400 },
+      );
+    }
+    Object.assign(system, body);
+    return HttpResponse.json(system);
+  }),
   http.delete(`${api}/api/engine/v1/systems/:id/`, () => new HttpResponse(null, { status: 204 })),
   http.post(`${api}/api/engine/v1/systems/:id/start/`, async ({ params, request }) => {
     const system = systemRows.find((item) => item.id === Number(params.id));
@@ -840,21 +874,66 @@ export const handlers = [
     system.allowed_actions = ["start", "edit", "delete"];
     return HttpResponse.json(system);
   }),
-  http.post(`${api}/api/engine/v1/systems/:id/:action/`, async ({ request }) => {
-    const cached = await idempotent(request, command);
-    return cached ?? HttpResponse.json(command, { status: 202 });
-  }),
-  http.delete(`${api}/api/engine/v1/systems/:id/orders/:orderId/`, async ({ request }) => {
-    const cached = await idempotent(request, command);
-    return cached ?? HttpResponse.json(command, { status: 202 });
-  }),
-  http.patch(`${api}/api/engine/v1/systems/:id/orders/:orderId/`, async ({ request }) => {
-    const cached = await idempotent(request, command);
-    return cached ?? HttpResponse.json(command, { status: 202 });
-  }),
   http.post(`${api}/api/engine/v1/systems/:id/orders/`, async ({ request }) => {
     const cached = await idempotent(request, command);
+    if (cached) return cached;
+    const body = (await request.clone().json()) as Record<string, unknown>;
+    if (Number(body.size ?? 0) > 10) {
+      const rejected = createCommand("new_order", body);
+      rejected.status = "rejected";
+      rejected.reason = "risk_rejected";
+      rejected.result = { risk_reason: "max order notional" };
+      return HttpResponse.json(rejected, { status: 202 });
+    }
+    if (body.type !== "market") {
+      orderRows.unshift({
+        ...orderRows[0],
+        id: 9000 + orderRows.length + 1,
+        origin: "manual",
+        side: typeof body.side === "string" ? body.side : "buy",
+        type: typeof body.type === "string" ? body.type : "limit",
+        size: String(body.size ?? "0"),
+        price: typeof body.price === "string" ? body.price : null,
+        stop_price: typeof body.stop_price === "string" ? body.stop_price : null,
+      });
+    }
+    return HttpResponse.json(createCommand("new_order", body), { status: 202 });
+  }),
+  http.post(`${api}/api/engine/v1/systems/:id/:action/`, async ({ params, request }) => {
+    if (params.action === "close-position") {
+      const cached = await idempotent(request, command);
+      if (cached) return cached;
+      positionRow = { ...positionRow, size: "0", side: null, unrealised_pnl: "0" };
+      return HttpResponse.json(createCommand("close_position", {}), { status: 202 });
+    }
+    const cached = await idempotent(request, command);
     return cached ?? HttpResponse.json(command, { status: 202 });
+  }),
+  http.delete(`${api}/api/engine/v1/systems/:id/orders/:orderId/`, async ({ params, request }) => {
+    const cached = await idempotent(request, command);
+    if (cached) return cached;
+    const id = Number(params.orderId);
+    orderRows = orderRows.filter((item) => item.id !== id);
+    return HttpResponse.json(createCommand("cancel_order", { order_id: id }), { status: 202 });
+  }),
+  http.patch(`${api}/api/engine/v1/systems/:id/orders/:orderId/`, async ({ params, request }) => {
+    const cached = await idempotent(request, command);
+    if (cached) return cached;
+    const body = (await request.clone().json()) as Record<string, unknown>;
+    const old = orderRows.find((item) => item.id === Number(params.orderId));
+    if (!old) return error("not_open", "Order is no longer open.", 409);
+    const replacement: SystemOrder = {
+      ...old,
+      id: old.id + 1,
+      replaces: old.id,
+      size: typeof body.size === "string" ? body.size : old.size,
+      price: typeof body.price === "string" ? body.price : old.price,
+      stop_price: typeof body.stop_price === "string" ? body.stop_price : old.stop_price,
+    };
+    old.status = "cancelled";
+    old.replaced_by = replacement.id;
+    orderRows = [replacement];
+    return HttpResponse.json(createCommand("modify_order", body), { status: 202 });
   }),
   http.post(`${api}/api/engine/v1/kill-switches/`, async ({ request }) => {
     const body = (await request.clone().json()) as {

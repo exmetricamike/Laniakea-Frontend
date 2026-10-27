@@ -241,6 +241,26 @@ export function useSystemCommands(
     options,
   );
 }
+export function useCommandStatus(systemId: number, commandId: number | null) {
+  const started = useRef<number | null>(null);
+  return useQuery({
+    queryKey: ["system", systemId, "command-status", commandId],
+    enabled: commandId !== null,
+    retry: false,
+    queryFn: async () => {
+      started.current ??= Date.now();
+      const response = await api.get<PaginatedList<SystemCommand>>(
+        `/api/engine/v1/systems/${systemId}/commands/`,
+      );
+      return response.results.find((item) => item.id === commandId) ?? null;
+    },
+    refetchInterval: (query) => {
+      if (started.current && Date.now() - started.current >= 120_000) return false;
+      const status = query.state.data?.status;
+      return status === "done" || status === "rejected" ? false : 1_000;
+    },
+  });
+}
 export function useSystemPosition(id: number, options: SystemQueryOptions = {}) {
   return useQuery({
     queryKey: queryKeys.system.position(id),
@@ -394,6 +414,13 @@ export function useInstruments(filters: {
     queryKey: queryKeys.instruments(filters),
     queryFn: () =>
       api.get<PaginatedList<Instrument>>(`/api/engine/v1/instruments/${queryString(filters)}`),
+  });
+}
+export function useInstrument(id: number, options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: queryKeys.instrument(id),
+    queryFn: () => api.get<Instrument>(`/api/engine/v1/instruments/${id}/`),
+    enabled: id > 0 && (options.enabled ?? true),
   });
 }
 export function useBacktestEquity(id: number, enabled: boolean) {

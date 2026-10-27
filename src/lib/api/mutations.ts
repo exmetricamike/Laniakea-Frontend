@@ -11,6 +11,10 @@ import type {
   SystemCreate,
   TradingSystem,
   KillSwitch,
+  ManualOrder,
+  ModifyOrder,
+  SystemCommand,
+  SystemUpdate,
 } from "@/lib/api/types";
 
 export type IntentKeyState = { key: string };
@@ -198,5 +202,45 @@ export function useSetGlobalKillSwitch() {
   return useMutation<KillSwitch, ApiError, { active: boolean; reason: string }>({
     mutationFn: (body) => api.post<KillSwitch>("/api/engine/v1/kill-switches/global/", body),
     onSuccess: invalidate,
+  });
+}
+
+export function useCancelOrder(systemId: number, orderId: number) {
+  return useIdempotentMutation<SystemCommand, void>((_, idempotencyKey) =>
+    apiRequest("DELETE", `/api/engine/v1/systems/${systemId}/orders/${orderId}/`, {
+      idempotencyKey,
+    }),
+  );
+}
+
+export function useModifyOrder(systemId: number, orderId: number) {
+  return useIdempotentMutation<SystemCommand, ModifyOrder>((body, idempotencyKey) =>
+    apiRequest("PATCH", `/api/engine/v1/systems/${systemId}/orders/${orderId}/`, {
+      body,
+      idempotencyKey,
+    }),
+  );
+}
+
+export function useNewOrder(systemId: number) {
+  return useIdempotentMutation<SystemCommand, ManualOrder>((body, idempotencyKey) =>
+    apiRequest("POST", `/api/engine/v1/systems/${systemId}/orders/`, { body, idempotencyKey }),
+  );
+}
+
+export function useClosePosition(systemId: number) {
+  return useIdempotentMutation<SystemCommand, void>((_, idempotencyKey) =>
+    apiRequest("POST", `/api/engine/v1/systems/${systemId}/close-position/`, {
+      body: {},
+      idempotencyKey,
+    }),
+  );
+}
+
+export function useUpdateSystem(id: number) {
+  const client = useQueryClient();
+  return useMutation<TradingSystem, ApiError, SystemUpdate>({
+    mutationFn: (body) => api.patch<TradingSystem>(`/api/engine/v1/systems/${id}/`, body),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["system", id] }),
   });
 }

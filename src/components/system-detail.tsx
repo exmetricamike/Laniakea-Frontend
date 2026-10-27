@@ -7,10 +7,12 @@ import { useForm } from "react-hook-form";
 import Decimal from "decimal.js-light";
 import { AlertTriangle } from "lucide-react";
 import { EquityChart, PriceChart, orderLines } from "@/components/charts";
-import { ModeBadge } from "@/components/mode-badge";
+import { SystemOrderActions, OrderRowActions } from "@/components/controls/order-dialogs";
 import { SystemActions } from "@/components/controls/system-actions";
+import { ModeBadge } from "@/components/mode-badge";
 import { type FormWithParams, SchemaForm } from "@/components/params/schema-form";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -38,7 +40,8 @@ import {
   useSystemPosition,
   useSystemTrades,
 } from "@/lib/api/queries";
-import type { BacktestMetric, TradingSystem } from "@/lib/api/types";
+import { useUpdateSystem } from "@/lib/api/mutations";
+import type { BacktestMetric, SystemOrder, TradingSystem } from "@/lib/api/types";
 
 type Tab =
   "open" | "history" | "trades" | "fills" | "performance" | "events" | "commands" | "settings";
@@ -120,6 +123,9 @@ function Header({ system, now }: { system: TradingSystem; now: number }) {
         ) : null}
         <SystemActions system={system} />
       </div>
+      <div className="flex flex-wrap gap-2">
+        <SystemOrderActions system={system} />
+      </div>
       {system.state_reason ? (
         <p className="text-sm text-[var(--muted-foreground)]">{system.state_reason}</p>
       ) : null}
@@ -192,7 +198,13 @@ function metric(value: unknown, percent = false, integer = false): string {
   return percent ? ratio(value) : new Decimal(value).toFixed(2);
 }
 
-function PositionCard({ position }: { position: ReturnType<typeof useSystemPosition> }) {
+function PositionCard({
+  position,
+  system,
+}: {
+  position: ReturnType<typeof useSystemPosition>;
+  system: TradingSystem;
+}) {
   if (position.isLoading)
     return (
       <Card>
@@ -228,6 +240,11 @@ function PositionCard({ position }: { position: ReturnType<typeof useSystemPosit
             <span>Unrealised: {money(row.unrealised_pnl)}</span>
           </div>
         )}
+        {row?.side && system.allowed_actions.includes("close_position") ? (
+          <div className="mt-3">
+            <SystemOrderActions system={{ ...system, allowed_actions: ["close_position"] }} />
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -323,7 +340,19 @@ function ActivityTabs({ id, active, running }: { id: number; active: Tab; runnin
     <>
       <TabsContent value="open">
         {table(
-          ["Created", "Tag", "Origin", "Side", "Type", "Size", "Filled", "Price", "Stop", "Status"],
+          [
+            "Created",
+            "Tag",
+            "Origin",
+            "Side",
+            "Type",
+            "Size",
+            "Filled",
+            "Price",
+            "Stop",
+            "Status",
+            "Actions",
+          ],
           page(open, "No open orders.", (order, index) => (
             <TableRow key={index}>
               <TableCell>
@@ -340,6 +369,9 @@ function ActivityTabs({ id, active, running }: { id: number; active: Tab; runnin
                 {money((order as never as { stop_price: string | null }).stop_price)}
               </TableCell>
               <TableCell>{(order as never as { status: string }).status}</TableCell>
+              <TableCell>
+                <OrderRowActions systemId={id} order={order as SystemOrder} />
+              </TableCell>
             </TableRow>
           )),
         )}
@@ -641,21 +673,133 @@ function PerformanceTab({
 
 function SettingsTab({ system, active }: { system: TradingSystem; active: boolean }) {
   const detail = useStrategyVersion(system.strategy, active ? system.version : null);
+  const update = useUpdateSystem(system.id);
+  const [editing, setEditing] = useState(false);
+  const [allocation, setAllocation] = useState(system.allocation);
+  const [risk, setRisk] = useState(system.risk);
+  const [costModel, setCostModel] = useState(system.cost_model);
   const form = useForm<FormWithParams>({
     defaultValues: { params: system.params as FormWithParams["params"] },
   });
+  const resetForm = () => {
+    setAllocation(system.allocation);
+    setRisk(system.risk);
+    setCostModel(system.cost_model);
+    form.reset({ params: system.params as FormWithParams["params"] });
+  };
+  const save = () => {
+    const changes = {
+      ...(allocation !== system.allocation ? { allocation } : {}),
+      ...(JSON.stringify(risk) !== JSON.stringify(system.risk) ? { risk } : {}),
+      ...(JSON.stringify(costModel) !== JSON.stringify(system.cost_model)
+        ? { cost_model: costModel }
+        : {}),
+      ...(JSON.stringify(form.getValues().params) !== JSON.stringify(system.params)
+        ? { params: form.getValues().params }
+        : {}),
+    };
+    update.mutate(changes, {
+      onSuccess: () => {
+        resetForm();
+        setEditing(false);
+      },
+    });
+  };
+  const parameterErrors = Object.fromEntries(
+    (Array.isArray(update.error?.fields?.params) ? update.error.fields.params : []).flatMap(
+      (item) => {
+        if (typeof item !== "string") return [];
+        const [path, text] = item.split(": ", 2);
+        return path && text && path !== "$" ? [[path.split("/")[0], text] as const] : [];
+      },
+    ),
+  );
   return (
     <TabsContent value="settings">
       {active && detail.isLoading ? <p>Loading…</p> : null}
       {active && detail.error ? <p role="alert">{errorText(detail.error)}</p> : null}
       {active ? (
         <>
+          {system.allowed_actions.includes("edit") ? (
+            <Button
+              variant="outline"
+              onClick={() => {
+                resetForm();
+                setEditing(true);
+              }}
+            >
+              Edit
+            </Button>
+          ) : null}
           <SchemaForm
             schema={detail.data?.params_schema}
             defaults={system.params}
             form={form}
-            disabled
+            serverErrors={parameterErrors}
+            disabled={!editing}
           />
+          {editing ? (
+            <div className="grid gap-3">
+              <SettingsField label="Allocation" value={allocation} onChange={setAllocation} />
+              <SettingsField
+                label="Max order notional"
+                value={risk.max_order_notional ?? ""}
+                onChange={(value) => {
+                  const { max_order_notional: ignored, ...rest } = risk;
+                  setRisk(value ? { ...rest, max_order_notional: value } : rest);
+                }}
+              />
+              <SettingsField
+                label="Max position notional"
+                value={risk.max_position_notional ?? ""}
+                onChange={(value) => {
+                  const { max_position_notional: ignored, ...rest } = risk;
+                  setRisk(value ? { ...rest, max_position_notional: value } : rest);
+                }}
+              />
+              <SettingsField
+                label="Max leverage"
+                value={risk.max_leverage ?? ""}
+                onChange={(value) => {
+                  const { max_leverage: ignored, ...rest } = risk;
+                  setRisk(value ? { ...rest, max_leverage: value } : rest);
+                }}
+              />
+              <SettingsField
+                label="Max orders per minute"
+                value={risk.max_orders_per_minute?.toString() ?? ""}
+                onChange={(value) => {
+                  const { max_orders_per_minute: ignored, ...rest } = risk;
+                  setRisk(value ? { ...rest, max_orders_per_minute: Number(value) } : rest);
+                }}
+              />
+              <SettingsField
+                label="Fee rate"
+                value={costModel.fee_rate.toString()}
+                onChange={(value) => setCostModel({ ...costModel, fee_rate: Number(value) })}
+              />
+              <SettingsField
+                label="Slippage bps"
+                value={costModel.slippage_bps.toString()}
+                onChange={(value) => setCostModel({ ...costModel, slippage_bps: Number(value) })}
+              />
+              <SettingsField
+                label="Leverage"
+                value={costModel.leverage.toString()}
+                onChange={(value) => setCostModel({ ...costModel, leverage: Number(value) })}
+              />
+              <Button disabled={update.isPending} onClick={save}>
+                Save settings
+              </Button>
+              {update.error ? (
+                <p role="alert">
+                  {update.error.status === 409
+                    ? "System is no longer stopped"
+                    : errorText(update.error)}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <dl className="grid gap-2 text-sm">
             <div>
               <dt>Risk limits</dt>
@@ -681,6 +825,29 @@ function SettingsTab({ system, active }: { system: TradingSystem; active: boolea
         </>
       ) : null}
     </TabsContent>
+  );
+}
+
+function SettingsField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const id = `settings-${label.toLowerCase().replaceAll(" ", "-")}`;
+  return (
+    <label htmlFor={id} className="grid gap-1">
+      {label}
+      <input
+        id={id}
+        className="rounded-md border bg-transparent px-3 py-2"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
   );
 }
 
@@ -767,7 +934,7 @@ export function SystemDetailPage() {
           }
         />
       </div>
-      <PositionCard position={position} />
+      <PositionCard position={position} system={system.data} />
       <Tabs value={active} onValueChange={(value) => setActive(value as Tab)} className="space-y-4">
         <TabsList className="flex h-auto flex-wrap gap-1" aria-label="System detail tabs">
           {[

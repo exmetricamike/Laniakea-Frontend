@@ -25,6 +25,7 @@ export const queryKeys = {
   },
   venues: () => ["venues"] as const,
   instruments: (filters: object) => ["instruments", filters] as const,
+  instrument: (id: number) => ["instrument", id] as const,
   strategies: () => ["strategies"] as const,
   strategy: (key: string) => ["strategy", key] as const,
   strategyVersions: (key: string) => ["strategy", key, "versions"] as const,
