@@ -493,7 +493,7 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    post: operations["systems_close_position_create"];
+    post: operations["engine_system_close_position"];
     delete?: never;
     options?: never;
     head?: never;
@@ -573,7 +573,7 @@ export interface paths {
     };
     get: operations["engine_system_orders"];
     put?: never;
-    post: operations["systems_orders_create"];
+    post: operations["engine_system_order_create"];
     delete?: never;
     options?: never;
     head?: never;
@@ -590,10 +590,10 @@ export interface paths {
     get?: never;
     put?: never;
     post?: never;
-    delete: operations["systems_orders_destroy"];
+    delete: operations["engine_system_order_cancel"];
     options?: never;
     head?: never;
-    patch: operations["systems_orders_partial_update"];
+    patch: operations["engine_system_order_modify"];
     trace?: never;
   };
   "/api/engine/v1/systems/{system_id}/performance/": {
@@ -875,6 +875,19 @@ export interface components {
      * @enum {string}
      */
     KindEnum: "spot" | "linear_perp";
+    ManualOrderCommandRequest: {
+      side: components["schemas"]["SideEnum"];
+      type: components["schemas"]["TypeEnum"];
+      /** Format: decimal */
+      size?: string | null;
+      /** Format: decimal */
+      notional?: string | null;
+      /** Format: decimal */
+      price?: string | null;
+      /** Format: decimal */
+      stop_price?: string | null;
+      reduce_only?: boolean;
+    };
     PaginatedInstrumentList: {
       /**
        * Format: uri
@@ -914,6 +927,20 @@ export interface components {
       max_drawdown_pct?: number | null;
       breaker_policy?: components["schemas"]["BreakerPolicyEnum"];
     };
+    PatchedModifyOrderCommandRequest: {
+      /** Format: decimal */
+      size?: string;
+      /** Format: decimal */
+      price?: string;
+      /** Format: decimal */
+      stop_price?: string;
+    };
+    /**
+     * @description * `buy` - buy
+     *     * `sell` - sell
+     * @enum {string}
+     */
+    SideEnum: "buy" | "sell";
     /** @description Read serializer backed by the reusable systems row builder. */
     System: {
       readonly id: number;
@@ -970,6 +997,30 @@ export interface components {
       /** Format: date-time */
       readonly created_at: string;
     };
+    /** @description Schema for the durable command row returned by command endpoints. */
+    SystemCommand: {
+      readonly id: number;
+      readonly system: number;
+      readonly kind: string;
+      readonly payload: unknown;
+      readonly status: string;
+      readonly reason: string | null;
+      readonly result: unknown;
+      /** Format: email */
+      readonly created_by: string | null;
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      readonly finished_at: string | null;
+    };
+    /**
+     * @description * `market` - market
+     *     * `limit` - limit
+     *     * `stop` - stop
+     *     * `stop_limit` - stop_limit
+     * @enum {string}
+     */
+    TypeEnum: "market" | "limit" | "stop" | "stop_limit";
     Version: {
       key: string;
       version: string;
@@ -1825,7 +1876,7 @@ export interface operations {
       };
     };
   };
-  systems_close_position_create: {
+  engine_system_close_position: {
     parameters: {
       query?: never;
       header?: never;
@@ -1834,14 +1885,21 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody?: {
+      content: {
+        "application/json": {
+          [key: string]: unknown;
+        };
+      };
+    };
     responses: {
-      /** @description No response body */
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["SystemCommand"];
+        };
       };
     };
   };
@@ -1960,7 +2018,7 @@ export interface operations {
       };
     };
   };
-  systems_orders_create: {
+  engine_system_order_create: {
     parameters: {
       query?: never;
       header?: never;
@@ -1969,18 +2027,23 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ManualOrderCommandRequest"];
+      };
+    };
     responses: {
-      /** @description No response body */
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["SystemCommand"];
+        };
       };
     };
   };
-  systems_orders_destroy: {
+  engine_system_order_cancel: {
     parameters: {
       query?: never;
       header?: never;
@@ -1992,16 +2055,17 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description No response body */
-      204: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["SystemCommand"];
+        };
       };
     };
   };
-  systems_orders_partial_update: {
+  engine_system_order_modify: {
     parameters: {
       query?: never;
       header?: never;
@@ -2011,14 +2075,19 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody?: {
+      content: {
+        "application/json": components["schemas"]["PatchedModifyOrderCommandRequest"];
+      };
+    };
     responses: {
-      /** @description No response body */
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["SystemCommand"];
+        };
       };
     };
   };
