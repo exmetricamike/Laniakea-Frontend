@@ -75,6 +75,60 @@ export type AccountBalance = {
   error: string | null;
 };
 export type PaginatedList<T> = { results: T[]; next: string | null; count: number | null };
+export type OperatorSystem = TradingSystem & {
+  owner: { id: number; email: string };
+};
+export type OperatorStrategyVersion = {
+  version: string;
+  code_revision: string;
+  status: "draft" | "published" | "unpublished";
+  published_at: string | null;
+  unpublished_at: string | null;
+};
+export type OperatorStrategy = {
+  key: string;
+  title: string;
+  versions: OperatorStrategyVersion[];
+};
+export type OperatorPublishedVersion = {
+  key: string;
+  version: string;
+  title: string;
+  description_md: string;
+  instrument_kinds: string[];
+  recommended_timeframes: string[];
+  warmup_bars: number;
+  params_schema: ParamsSchema;
+  default_params: Record<string, JsonValue>;
+  meta: StrategyMeta;
+  published_at: string | null;
+};
+export type AuditLogRow = {
+  id: number;
+  time: string;
+  actor: { id: number; email: string } | null;
+  action: string;
+  target_type: string;
+  target_id: string;
+  data: JsonValue;
+  ip: string | null;
+};
+export type Health = {
+  supervisor: { alive: boolean; error: string | null };
+  workers: Record<string, number>;
+  heartbeats: Array<{ system: number; state: string; age_s: number | null }>;
+  markets: Array<{
+    key: string;
+    lag_s: number | null;
+    heartbeat_age_s: number | null;
+    gaps: number;
+    last_error: string | null;
+  }>;
+  md_live_heartbeat_age_s: number | null;
+  redis: { ok: boolean; latency_ms: number | null; error: string | null };
+  db: { ok: boolean; latency_ms: number | null; error: string | null };
+  time: string;
+};
 
 export type PortfolioBucket = {
   currency: string;

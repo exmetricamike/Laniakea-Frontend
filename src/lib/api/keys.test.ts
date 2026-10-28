@@ -22,5 +22,17 @@ describe("query keys", () => {
     expect(queryKeys.system.chart(42, "1d")).toEqual(["system", 42, "chart", "1d"]);
     expect(queryKeys.system.events(42)).toEqual(["system", 42, "events"]);
     expect(queryKeys.system.commands(42)).toEqual(["system", 42, "commands"]);
+    expect(queryKeys.operator.systems({ state: "running" })).toEqual([
+      "operator",
+      "systems",
+      { state: "running" },
+    ]);
+    expect(queryKeys.operator.strategies()).toEqual(["operator", "strategies"]);
+    expect(queryKeys.operator.auditLog({ action: "system.start" })).toEqual([
+      "operator",
+      "audit-log",
+      { action: "system.start" },
+    ]);
+    expect(queryKeys.operator.health()).toEqual(["operator", "health"]);
   });
 });

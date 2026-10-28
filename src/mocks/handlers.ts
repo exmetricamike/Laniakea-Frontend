@@ -10,7 +10,7 @@ import {
   venues,
 } from "@/mocks/fixtures/data";
 import type { EngineEvent, SystemStateEvent } from "@/lib/ws/events";
-import type { BacktestStatus, SystemCommand, SystemOrder } from "@/lib/api/types";
+import type { BacktestStatus, OperatorSystem, SystemCommand, SystemOrder } from "@/lib/api/types";
 
 const api = "http://localhost:8000";
 const engineSocket = ws.link(`${api}/ws/engine/`);
@@ -100,6 +100,73 @@ const balancePolls = new Map<number, number>();
 let failNextVersionDetail = false;
 let failNextStart = false;
 let blockNextStart = false;
+const operatorSystems: OperatorSystem[] = systems.map((system, index) => ({
+  ...system,
+  allowed_actions: [],
+  owner:
+    index % 2 === 0
+      ? { id: 1, email: "ops@example.test" }
+      : { id: 2, email: "tenant@example.test" },
+}));
+const operatorStrategies = [
+  {
+    key: "atr_strategies/atr_allocation",
+    title: "ATR allocation",
+    versions: [
+      {
+        version: "1.1.0",
+        code_revision: "draft-revision",
+        status: "draft",
+        published_at: null,
+        unpublished_at: null,
+      },
+      {
+        version: "1.0.0",
+        code_revision: "published-revision",
+        status: "published",
+        published_at: "2026-10-22T10:00:00Z",
+        unpublished_at: null,
+      },
+    ],
+  },
+];
+const operatorVersionResponse = {
+  key: "atr_strategies/atr_allocation",
+  version: "1.1.0",
+  title: "ATR allocation",
+  description_md: "# ATR allocation",
+  instrument_kinds: ["spot"],
+  recommended_timeframes: ["1h"],
+  warmup_bars: 200,
+  params_schema: { type: "object", properties: {} },
+  default_params: {},
+  meta: { live_capable: true, restart_safe: true, notes: [] },
+  published_at: "2026-10-22T10:00:00Z",
+};
+const auditRows = [
+  {
+    id: 1,
+    time: "2026-10-22T10:00:00Z",
+    actor: { id: 1, email: "ops@example.test" },
+    action: "system.start",
+    target_type: "trading_system",
+    target_id: "42",
+    data: { name: "Paper trend" },
+    ip: "127.0.0.1",
+  },
+];
+const health = {
+  supervisor: { alive: true, error: null },
+  workers: { running: 1, stopped: 2 },
+  heartbeats: [{ system: 43, state: "running", age_s: 5 }],
+  markets: [
+    { key: "bars:binance:BTC/USDT:1h", lag_s: 1, heartbeat_age_s: 2, gaps: 0, last_error: null },
+  ],
+  md_live_heartbeat_age_s: 2,
+  redis: { ok: true, latency_ms: 1, error: null },
+  db: { ok: true, latency_ms: 1, error: null },
+  time: "2026-10-22T10:00:00Z",
+};
 const list = <T>(results: T[]) => ({ results, next: null, count: results.length });
 function portfolioFixture(): "default" | "large" | "empty" | "paper-only" {
   if (typeof localStorage === "undefined") return "default";
@@ -412,6 +479,16 @@ function queuedBacktest(id: number): Record<string, unknown> {
 function error(code: string, message: string, status: number) {
   return HttpResponse.json({ error: { code, message, fields: {}, reasons: [] } }, { status });
 }
+function mockRole(request: Request): "staff" | "tenant" {
+  return request.headers.get("authorization")?.startsWith("Bearer mock:staff:")
+    ? "staff"
+    : "tenant";
+}
+function operatorError(request: Request) {
+  return mockRole(request) === "staff"
+    ? null
+    : error("permission_denied", "Permission denied.", 403);
+}
 export function resetIdempotency(): void {
   replay.clear();
 }
@@ -465,8 +542,9 @@ export async function idempotent(
 
 export const handlers = [
   engineSocketHandler,
-  http.options(`${api}/__mocks/ws/:action`, () =>
-    new HttpResponse(null, { status: 204, headers: corsHeaders }),
+  http.options(
+    `${api}/__mocks/ws/:action`,
+    () => new HttpResponse(null, { status: 204, headers: corsHeaders }),
   ),
   http.post(`${api}/__mocks/ws/emit`, async ({ request }) => {
     let event: unknown;
@@ -532,14 +610,23 @@ export const handlers = [
   }),
   http.post(`${api}/api/jwt/create/`, async ({ request }) => {
     const body = (await request.json()) as { email?: string; password?: string };
-    return body.password === "demo"
-      ? HttpResponse.json({ access: "mock-access", refresh: "mock-refresh" })
+    const email = body.email?.toLowerCase() ?? "";
+    const role = email.startsWith("ops@") ? "staff" : "tenant";
+    return body.password === "demo" && email
+      ? HttpResponse.json({ access: `mock:${role}:${email}`, refresh: `mock:${role}:${email}` })
       : error("not_authenticated", "Invalid credentials", 401);
   }),
-  http.post(`${api}/api/jwt/refresh/`, () => HttpResponse.json({ access: "mock-access" })),
-  http.get(`${api}/api/users/me/`, () =>
-    HttpResponse.json({ email: "demo@example.test", is_staff: true }),
-  ),
+  http.post(`${api}/api/jwt/refresh/`, async ({ request }) => {
+    const body = (await request.json()) as { refresh?: string };
+    return typeof body.refresh === "string" && body.refresh.startsWith("mock:")
+      ? HttpResponse.json({ access: body.refresh })
+      : error("not_authenticated", "Invalid refresh token", 401);
+  }),
+  http.get(`${api}/api/users/me/`, ({ request }) => {
+    const token = request.headers.get("authorization")?.replace("Bearer mock:", "") ?? "";
+    const [role, email] = token.split(":");
+    return HttpResponse.json({ email: email || "tenant@example.test", is_staff: role === "staff" });
+  }),
   http.get(`${api}/api/engine/v1/venues/`, () => HttpResponse.json(list(venues))),
   http.get(`${api}/api/engine/v1/instruments/`, () => HttpResponse.json(list(instruments))),
   http.get(`${api}/api/engine/v1/instruments/:id/`, () => HttpResponse.json(instruments[0])),
@@ -999,13 +1086,22 @@ export const handlers = [
     }),
   ),
   http.get(`${api}/api/engine/v1/kill-switches/`, () => HttpResponse.json(list(killSwitchRows))),
-  http.get(`${api}/api/engine/v1/operator/systems/`, () => HttpResponse.json(list(systems))),
-  http.get(`${api}/api/engine/v1/audit-log/`, () =>
-    HttpResponse.json(list([{ id: 1, action: "system.start", time: "2026-10-22T10:00:00Z" }])),
-  ),
-  http.get(`${api}/api/engine/v1/health/`, () =>
-    HttpResponse.json({ supervisor: "alive", workers: [], redis: "ok", database: "ok" }),
-  ),
+  http.get(`${api}/api/engine/v1/operator/systems/`, ({ request }) => {
+    const denied = operatorError(request);
+    return denied ?? HttpResponse.json(list(operatorSystems));
+  }),
+  http.get(`${api}/api/engine/v1/operator/strategies/`, ({ request }) => {
+    const denied = operatorError(request);
+    return denied ?? HttpResponse.json(list(operatorStrategies));
+  }),
+  http.get(`${api}/api/engine/v1/audit-log/`, ({ request }) => {
+    const denied = operatorError(request);
+    return denied ?? HttpResponse.json(list(auditRows));
+  }),
+  http.get(`${api}/api/engine/v1/health/`, ({ request }) => {
+    const denied = operatorError(request);
+    return denied ?? HttpResponse.json(health);
+  }),
   http.post(`${api}/api/engine/v1/systems/`, async ({ request }) => {
     const body = (await request.json()) as Record<string, unknown>;
     const params = body.params as Record<string, unknown> | undefined;
@@ -1246,12 +1342,16 @@ export const handlers = [
   http.post(`${api}/api/engine/v1/backtests/:id/cancel/`, () =>
     HttpResponse.json({ id: 1, status: "cancelled" }, { status: 202 }),
   ),
-  http.post(`${api}/api/engine/v1/operator/strategies/:family/:name/versions/`, () =>
-    HttpResponse.json(strategies[0], { status: 201 }),
-  ),
+  http.post(`${api}/api/engine/v1/operator/strategies/:family/:name/versions/`, ({ request }) => {
+    const denied = operatorError(request);
+    return denied ?? HttpResponse.json(operatorVersionResponse);
+  }),
   http.post(
     `${api}/api/engine/v1/operator/strategies/:family/:name/versions/:version/unpublish/`,
-    () => HttpResponse.json({ ...strategies[0], published_at: null }, { status: 202 }),
+    ({ request }) => {
+      const denied = operatorError(request);
+      return denied ?? HttpResponse.json(operatorVersionResponse);
+    },
   ),
   http.all(`${api}/api/engine/v1/*`, () => error("not_found", "Mock endpoint not found", 404)),
 ];

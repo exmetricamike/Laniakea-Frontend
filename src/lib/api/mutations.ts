@@ -13,6 +13,7 @@ import type {
   KillSwitch,
   ManualOrder,
   ModifyOrder,
+  OperatorPublishedVersion,
   SystemCommand,
   SystemUpdate,
 } from "@/lib/api/types";
@@ -202,6 +203,33 @@ export function useSetGlobalKillSwitch() {
   return useMutation<KillSwitch, ApiError, { active: boolean; reason: string }>({
     mutationFn: (body) => api.post<KillSwitch>("/api/engine/v1/kill-switches/global/", body),
     onSuccess: invalidate,
+  });
+}
+
+export function usePublishVersion(family: string, name: string) {
+  const client = useQueryClient();
+  return useMutation<
+    OperatorPublishedVersion,
+    ApiError,
+    { version: string; code_revision: string; evidence: number[] }
+  >({
+    mutationFn: (body) =>
+      api.post<OperatorPublishedVersion>(
+        `/api/engine/v1/operator/strategies/${encodeURIComponent(family)}/${encodeURIComponent(name)}/versions/`,
+        body,
+      ),
+    onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.operator.strategies() }),
+  });
+}
+
+export function useUnpublishVersion(family: string, name: string, version: string) {
+  const client = useQueryClient();
+  return useMutation<OperatorPublishedVersion, ApiError, void>({
+    mutationFn: () =>
+      api.post<OperatorPublishedVersion>(
+        `/api/engine/v1/operator/strategies/${encodeURIComponent(family)}/${encodeURIComponent(name)}/versions/${encodeURIComponent(version)}/unpublish/`,
+      ),
+    onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.operator.strategies() }),
   });
 }
 

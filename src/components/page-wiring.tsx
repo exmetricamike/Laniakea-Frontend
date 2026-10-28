@@ -8,7 +8,7 @@ import {
   useInstruments,
   useKillSwitches,
   useMe,
-  useOperatorSystems,
+  useOperatorSystemsInfinite,
   usePortfolioSummary,
   useStrategies,
   useSystem,
@@ -63,8 +63,9 @@ export function RiskProof() {
   return <DataProof {...query}>{query.data?.results?.length ?? 0} kill switches</DataProof>;
 }
 export function OperatorProof() {
-  const query = useOperatorSystems();
-  return <DataProof {...query}>{query.data?.results?.length ?? 0} systems (all tenants)</DataProof>;
+  const query = useOperatorSystemsInfinite({});
+  const count = query.data?.pages.flatMap((page) => page.results).length ?? 0;
+  return <DataProof {...query}>{count} systems (all tenants)</DataProof>;
 }
 export function SettingsProof() {
   const query = useMe();

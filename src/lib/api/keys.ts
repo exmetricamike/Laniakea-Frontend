@@ -43,5 +43,10 @@ export const queryKeys = {
   risk: () => ["risk"] as const,
   systems: (filters: object) => ["systems", filters] as const,
   me: () => ["me"] as const,
-  operator: { systems: () => ["operator", "systems"] as const },
+  operator: {
+    systems: (filters: object) => ["operator", "systems", filters] as const,
+    strategies: () => ["operator", "strategies"] as const,
+    auditLog: (filters: object) => ["operator", "audit-log", filters] as const,
+    health: () => ["operator", "health"] as const,
+  },
 };

@@ -17,6 +17,10 @@ import type {
   ChartPayload,
   Instrument,
   KillSwitch,
+  Health,
+  AuditLogRow,
+  OperatorStrategy,
+  OperatorSystem,
   PaginatedList,
   PortfolioSummary,
   PortfolioEquity,
@@ -473,10 +477,57 @@ export function useKillSwitches() {
     refetchInterval: poll,
   });
 }
-export function useOperatorSystems() {
+export type OperatorSystemsFilters = {
+  state?: string;
+  mode?: string;
+  owner?: string;
+  strategy?: string;
+};
+export function useOperatorSystemsInfinite(
+  filters: OperatorSystemsFilters,
+  options: { enabled?: boolean } = {},
+) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.operator.systems(filters),
+    initialPageParam: "",
+    enabled: options.enabled ?? true,
+    queryFn: ({ pageParam }) =>
+      api.get<PaginatedList<OperatorSystem>>(
+        `/api/engine/v1/operator/systems/${queryString({ ...filters, cursor: String(pageParam) })}`,
+      ),
+    getNextPageParam: (page) =>
+      page.next ? (new URL(page.next).searchParams.get("cursor") ?? undefined) : undefined,
+  });
+}
+export function useOperatorStrategies(options: { enabled?: boolean } = {}) {
   return useQuery({
-    queryKey: queryKeys.operator.systems(),
-    queryFn: () => api.get<PaginatedList<TradingSystem>>("/api/engine/v1/operator/systems/"),
+    queryKey: queryKeys.operator.strategies(),
+    enabled: options.enabled ?? true,
+    queryFn: () => api.get<PaginatedList<OperatorStrategy>>("/api/engine/v1/operator/strategies/"),
+  });
+}
+export function useAuditLogInfinite(
+  filters: { actor?: string; action?: string; target?: string },
+  options: { enabled?: boolean } = {},
+) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.operator.auditLog(filters),
+    initialPageParam: "",
+    enabled: options.enabled ?? true,
+    queryFn: ({ pageParam }) =>
+      api.get<PaginatedList<AuditLogRow>>(
+        `/api/engine/v1/audit-log/${queryString({ ...filters, cursor: String(pageParam) })}`,
+      ),
+    getNextPageParam: (page) =>
+      page.next ? (new URL(page.next).searchParams.get("cursor") ?? undefined) : undefined,
+  });
+}
+export function useHealth(options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: queryKeys.operator.health(),
+    enabled: options.enabled ?? true,
+    queryFn: () => api.get<Health>("/api/engine/v1/health/"),
+    refetchInterval: 10_000,
   });
 }
 export type CurrentUser = { email: string; is_staff: boolean };
