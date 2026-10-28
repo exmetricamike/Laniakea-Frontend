@@ -26,6 +26,8 @@ export class ApiError extends Error {
 }
 
 let refreshing: Promise<boolean> | null = null;
+let sessionExpired = false;
+let sessionExpiredHandler: (() => void) | null = null;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -86,16 +88,40 @@ async function doRefresh(): Promise<boolean> {
   }
 }
 
+export function registerSessionExpired(handler: () => void): () => void {
+  sessionExpiredHandler = handler;
+  return () => {
+    if (sessionExpiredHandler === handler) sessionExpiredHandler = null;
+  };
+}
+
 function loginPath(): string {
   if (typeof window === "undefined") return "/login";
   const next = `${window.location.pathname}${window.location.search}`;
   return `/login?next=${encodeURIComponent(next)}`;
 }
 
-function expireSession(): never {
+export function handleSessionExpired(): void {
+  if (sessionExpired) return;
+  sessionExpired = true;
   clearTokens();
+  sessionExpiredHandler?.();
   if (typeof window !== "undefined") window.location.href = loginPath();
+}
+
+function expireSession(): never {
+  handleSessionExpired();
   throw new ApiError("Session expired", 401, "not_authenticated");
+}
+
+export function refreshAccessToken(): Promise<boolean> {
+  refreshing ??= doRefresh().then((refreshed) => {
+    if (!refreshed) handleSessionExpired();
+    return refreshed;
+  });
+  return refreshing.finally(() => {
+    refreshing = null;
+  });
 }
 
 function requestHeaders(init: RequestInit, includeAuthorization: boolean): Headers {
@@ -119,9 +145,7 @@ async function request<T>(path: string, init: RequestInit, retry = true): Promis
   }
   if (response.status === 401 && retry) {
     if (!getRefresh()) return expireSession();
-    refreshing ??= doRefresh();
-    const refreshed = await refreshing;
-    refreshing = null;
+    const refreshed = await refreshAccessToken();
     if (refreshed) return request<T>(path, init, false);
     return expireSession();
   }
@@ -174,4 +198,6 @@ export async function publicRequest<T>(path: string, init: RequestInit = {}): Pr
 
 export function __resetRefreshStateForTests() {
   refreshing = null;
+  sessionExpired = false;
+  sessionExpiredHandler = null;
 }

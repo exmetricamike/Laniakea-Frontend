@@ -7,6 +7,7 @@ import { useForm, useWatch } from "react-hook-form";
 import Decimal from "decimal.js-light";
 import { Copy, LoaderCircle } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
+import { useLiveChannel } from "@/lib/ws/socket";
 import { useCancelBacktest, useCreateBacktest } from "@/lib/api/mutations";
 import {
   useBacktest,
@@ -703,6 +704,8 @@ function PaginatedTables({ job }: { job: BacktestJob }) {
 export function BacktestDetailPage() {
   const { id } = useParams<{ id: string }>();
   const job = useBacktest(Number(id), { poll: true });
+  const finished = ["done", "failed", "cancelled"].includes(job.data?.status ?? "");
+  useLiveChannel(`backtest.${id}`, Boolean(job.data) && !finished);
   const cancel = useCancelBacktest(Number(id));
   const equity = useBacktestEquity(Number(id), job.data?.status === "done");
   const chart = useBacktestChart(Number(id), job.data?.status === "done");

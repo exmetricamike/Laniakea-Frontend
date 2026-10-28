@@ -21,6 +21,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { clearTokens } from "@/lib/auth";
+import { LiveSocketProvider } from "@/lib/ws/socket";
 import { KillSwitchDialog } from "@/components/controls/kill-switch-dialog";
 import { useKillSwitches, useMe, useSystems } from "@/lib/api/queries";
 import { cn } from "@/lib/utils";
@@ -266,15 +267,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <TooltipProvider>
-      <div className="min-h-screen md:flex">
-        <Sidebar isStaff={user?.is_staff === true} />
-        <div className="min-w-0 flex-1">
-          <TopBar user={user ?? null} />
-          <HaltBanner />
-          <main className="p-5 md:p-8">{children}</main>
+    <LiveSocketProvider>
+      <TooltipProvider>
+        <div className="min-h-screen md:flex">
+          <Sidebar isStaff={user?.is_staff === true} />
+          <div className="min-w-0 flex-1">
+            <TopBar user={user ?? null} />
+            <HaltBanner />
+            <main className="p-5 md:p-8">{children}</main>
+          </div>
         </div>
-      </div>
-    </TooltipProvider>
+      </TooltipProvider>
+    </LiveSocketProvider>
   );
 }

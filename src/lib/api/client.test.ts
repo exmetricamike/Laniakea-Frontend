@@ -27,7 +27,7 @@ Object.defineProperty(globalThis, "window", {
   value: { localStorage: memory, location: { href: "" } },
   configurable: true,
 });
-const { __resetRefreshStateForTests, api, ApiError, publicRequest } =
+const { __resetRefreshStateForTests, api, ApiError, publicRequest, refreshAccessToken } =
   await import("@/lib/api/client");
 afterEach(() => {
   memory.clear();
@@ -40,6 +40,21 @@ afterEach(() => {
 });
 
 describe("API client", () => {
+  it("shares one refresh request between direct concurrent callers", async () => {
+    setTokens("old", "refresh");
+    let refreshes = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        refreshes += 1;
+        return new Response(JSON.stringify({ access: "new" }), { status: 200 });
+      }),
+    );
+    await Promise.all([refreshAccessToken(), refreshAccessToken()]);
+    expect(refreshes).toBe(1);
+    expect(getAccess()).toBe("new");
+  });
+
   it("shares one refresh request between concurrent 401s", async () => {
     setTokens("old", "refresh");
     let refreshes = 0;

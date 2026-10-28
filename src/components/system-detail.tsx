@@ -25,6 +25,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ApiError } from "@/lib/api/client";
+import { useLiveChannel } from "@/lib/ws/socket";
 import {
   useAccount,
   useBacktest,
@@ -854,6 +855,7 @@ function SettingsField({
 export function SystemDetailPage() {
   const { id: rawId } = useParams<{ id: string }>();
   const id = Number(rawId);
+  useLiveChannel(`system.${id}`, Number.isInteger(id) && id > 0);
   const system = useSystem(id, { poll: true });
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
