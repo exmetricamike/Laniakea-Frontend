@@ -1,4 +1,4 @@
-import { http, HttpResponse } from "msw";
+import { http, HttpResponse, ws } from "msw";
 import {
   accounts as accountFixtures,
   instruments,
@@ -9,9 +9,12 @@ import {
   systems,
   venues,
 } from "@/mocks/fixtures/data";
-import type { SystemOrder } from "@/lib/api/types";
+import type { EngineEvent, SystemStateEvent } from "@/lib/ws/events";
+import type { BacktestStatus, SystemCommand, SystemOrder } from "@/lib/api/types";
 
 const api = "http://localhost:8000";
+const engineSocket = ws.link(`${api}/ws/engine/`);
+const corsHeaders = { "Access-Control-Allow-Origin": "*" };
 const replay = new Map<string, { body: string; response: unknown }>();
 const STORE_KEY = "laniakea.mocks.accounts";
 // MSW handlers run in the page, so in-memory state would vanish on reload; keep it in
@@ -28,7 +31,7 @@ function saveAccounts(): void {
 }
 let accounts = loadAccounts();
 let systemRows = structuredClone(systems);
-let orderRows: SystemOrder[] = [
+const initialOrderRows: SystemOrder[] = [
   {
     id: 9001,
     client_id: "e42s000137",
@@ -54,8 +57,13 @@ let orderRows: SystemOrder[] = [
     allowed_actions: ["cancel_order", "modify_order"],
   },
 ];
-let commandRows: Array<Record<string, unknown>> = [];
+let orderRows = structuredClone(initialOrderRows);
+let commandRows: SystemCommand[] = [];
 let commandPolls = new Map<number, number>();
+const commandTimers = new Set<ReturnType<typeof setTimeout>>();
+const socketSubscriptions = new Map<string, Set<string>>();
+const socketSequences = new Map<string, number>();
+let socketBlocked = false;
 let positionRow = {
   size: "0.031",
   side: "long" as "long" | "short" | null,
@@ -164,7 +172,7 @@ function fixtureTrades() {
     system: { id: 1_000 + (index % 50), name: `Large system ${(index % 50) + 1}` },
   }));
 }
-const command = {
+const command: SystemCommand = {
   id: 77,
   system: 42,
   kind: "command",
@@ -176,19 +184,148 @@ const command = {
   created_at: "2026-10-22T10:00:00Z",
   finished_at: null,
 };
-function createCommand(kind: string, payload: Record<string, unknown>) {
-  const row = {
+function nextSocketSequence(channel: string): number {
+  const sequence = (socketSequences.get(channel) ?? 0) + 1;
+  socketSequences.set(channel, sequence);
+  return sequence;
+}
+
+function emitSocketFrame(frame: unknown, channel: string): void {
+  engineSocket.clients.forEach((client) => {
+    if (socketSubscriptions.get(client.id)?.has(channel)) sendSocketClient(client, frame);
+  });
+}
+
+function sendSocketClient(client: { send: (data: string) => void }, frame: unknown): void {
+  try {
+    client.send(JSON.stringify(frame));
+  } catch {
+    // MSW can retain a closed client briefly while its close event propagates.
+  }
+}
+
+function emitEvent(event: EngineEvent): void {
+  socketSequences.set(event.channel, Math.max(socketSequences.get(event.channel) ?? 0, event.seq));
+  emitSocketFrame(event, event.channel);
+}
+
+function emitCommand(commandRow: SystemCommand): void {
+  const channel = `system.${commandRow.system}`;
+  emitEvent({
+    type: "command.updated",
+    channel,
+    seq: nextSocketSequence(channel),
+    time: new Date().toISOString(),
+    data: commandRow,
+  });
+}
+
+function emitSystemState(system: (typeof systemRows)[number]): void {
+  const data: SystemStateEvent = {
+    id: system.id,
+    state: system.state,
+    desired_state: system.desired_state,
+    state_reason: system.state_reason,
+    allowed_actions: system.allowed_actions,
+  };
+  const channel = `system.${system.id}`;
+  emitEvent({
+    type: "system.state",
+    channel,
+    seq: nextSocketSequence(channel),
+    time: new Date().toISOString(),
+    data,
+  });
+}
+
+function scheduleCommandProgress(commandRow: SystemCommand): void {
+  const executingTimer = setTimeout(() => {
+    commandTimers.delete(executingTimer);
+    if (commandRow.status !== "pending") return;
+    commandRow.status = "executing";
+    emitCommand(commandRow);
+  }, 250);
+  const doneTimer = setTimeout(() => {
+    commandTimers.delete(doneTimer);
+    if (commandRow.status !== "executing") return;
+    commandRow.status = "done";
+    commandRow.finished_at = new Date().toISOString();
+    emitCommand(commandRow);
+  }, 500);
+  commandTimers.add(executingTimer);
+  commandTimers.add(doneTimer);
+}
+
+function createCommand(kind: string, payload: Record<string, unknown>): SystemCommand {
+  const row: SystemCommand = {
     ...command,
     id: 100 + commandRows.length,
     kind,
-    payload,
+    payload: payload as SystemCommand["payload"],
     status: "pending",
     reason: null as string | null,
-    result: {} as Record<string, unknown>,
+    result: {},
   };
   commandRows.unshift(row);
+  emitCommand(row);
+  scheduleCommandProgress(row);
   return row;
 }
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function syncEventStore(event: Record<string, unknown>): void {
+  const data = event.data;
+  if (!isRecord(data)) return;
+  if (event.type === "system.state" && typeof data.id === "number") {
+    const system = systemRows.find((item) => item.id === data.id);
+    if (system) Object.assign(system, data);
+  }
+  if (event.type === "order.updated" && typeof data.id === "number") {
+    const order = data as SystemOrder;
+    const index = orderRows.findIndex((item) => item.id === order.id);
+    if (index === -1) orderRows.unshift(order);
+    else orderRows[index] = order;
+  }
+}
+
+const engineSocketHandler = engineSocket.addEventListener("connection", ({ client }) => {
+  socketSubscriptions.set(client.id, new Set());
+  client.addEventListener("close", () => socketSubscriptions.delete(client.id));
+  client.addEventListener("message", (message) => {
+    if (typeof message.data !== "string") return;
+    let frame: unknown;
+    try {
+      frame = JSON.parse(message.data);
+    } catch {
+      sendSocketClient(client, { type: "error", detail: "Malformed message" });
+      return;
+    }
+    if (!isRecord(frame) || typeof frame.action !== "string") {
+      sendSocketClient(client, { type: "error", detail: "Malformed action" });
+      return;
+    }
+    if (frame.action === "auth") {
+      if (!socketBlocked) sendSocketClient(client, { type: "auth.ok" });
+      return;
+    }
+    if (frame.action === "subscribe" && typeof frame.channel === "string") {
+      socketSubscriptions.get(client.id)?.add(frame.channel);
+      if (!socketBlocked) {
+        sendSocketClient(client, { type: "subscribed", channel: frame.channel });
+      }
+      return;
+    }
+    if (frame.action === "unsubscribe" && typeof frame.channel === "string") {
+      socketSubscriptions.get(client.id)?.delete(frame.channel);
+      sendSocketClient(client, { type: "unsubscribed", channel: frame.channel });
+      return;
+    }
+    sendSocketClient(client, { type: "error", detail: "Malformed action" });
+  });
+});
 const backtestJob = {
   id: 1,
   strategy: "atr_strategies/atr_allocation",
@@ -218,7 +355,60 @@ const backtestJob = {
   engine_revision: "mock",
   trades_count: 1,
 };
-let queuedBacktestPolls = 0;
+type MockBacktestState = {
+  status: BacktestStatus;
+  progress: number;
+  scheduled: boolean;
+};
+
+const backtestStates = new Map<number, MockBacktestState>();
+const backtestTimers = new Set<ReturnType<typeof setTimeout>>();
+
+function emitBacktestProgress(id: number, status: BacktestStatus, progress: number): void {
+  ["portfolio", `backtest.${id}`].forEach((channel) => {
+    emitEvent({
+      type: "backtest.progress",
+      channel,
+      seq: nextSocketSequence(channel),
+      time: new Date().toISOString(),
+      data: { id, status, progress },
+    });
+  });
+}
+
+function scheduleBacktest(id: number): void {
+  const state = backtestStates.get(id);
+  if (!state || state.scheduled) return;
+  state.scheduled = true;
+  const queuedTimer = setTimeout(() => {
+    backtestTimers.delete(queuedTimer);
+    emitBacktestProgress(id, state.status, state.progress);
+  }, 250);
+  const runningTimer = setTimeout(() => {
+    backtestTimers.delete(runningTimer);
+    state.status = "running";
+    state.progress = 0.5;
+    emitBacktestProgress(id, state.status, state.progress);
+  }, 500);
+  const doneTimer = setTimeout(() => {
+    backtestTimers.delete(doneTimer);
+    state.status = "done";
+    state.progress = 1;
+    emitBacktestProgress(id, state.status, state.progress);
+  }, 1_000);
+  backtestTimers.add(queuedTimer);
+  backtestTimers.add(runningTimer);
+  backtestTimers.add(doneTimer);
+}
+
+function queuedBacktest(id: number): Record<string, unknown> {
+  const state = backtestStates.get(id) ?? { status: "queued", progress: 0, scheduled: false };
+  backtestStates.set(id, state);
+  scheduleBacktest(id);
+  if (state.status === "done") return { ...backtestJob, id };
+  return { ...backtestJob, id, status: state.status, progress: state.progress, metrics: null };
+}
+
 function error(code: string, message: string, status: number) {
   return HttpResponse.json({ error: { code, message, fields: {}, reasons: [] } }, { status });
 }
@@ -234,8 +424,17 @@ export function resetAccountMocks(): void {
   failNextVersionDetail = false;
   failNextStart = false;
   blockNextStart = false;
-  queuedBacktestPolls = 0;
+  backtestStates.clear();
+  backtestTimers.forEach((timer) => clearTimeout(timer));
+  backtestTimers.clear();
   systemRows = structuredClone(systems);
+  orderRows = structuredClone(initialOrderRows);
+  commandRows = [];
+  commandPolls.clear();
+  commandTimers.forEach((timer) => clearTimeout(timer));
+  commandTimers.clear();
+  socketSequences.clear();
+  socketBlocked = false;
   killSwitchRows = [
     { scope: "tenant", target: null, active: false, reason: "", set_by: null, set_at: null },
     {
@@ -265,6 +464,43 @@ export async function idempotent(
 }
 
 export const handlers = [
+  engineSocketHandler,
+  http.options(`${api}/__mocks/ws/:action`, () =>
+    new HttpResponse(null, { status: 204, headers: corsHeaders }),
+  ),
+  http.post(`${api}/__mocks/ws/emit`, async ({ request }) => {
+    let event: unknown;
+    try {
+      event = await request.json();
+    } catch {
+      return HttpResponse.json({ error: "Invalid event" }, { status: 400, headers: corsHeaders });
+    }
+    if (!isRecord(event) || typeof event.channel !== "string") {
+      return HttpResponse.json({ error: "Invalid event" }, { status: 400, headers: corsHeaders });
+    }
+    syncEventStore(event);
+    emitSocketFrame(event, event.channel);
+    if (typeof event.seq === "number") {
+      const previous = socketSequences.get(event.channel) ?? 0;
+      socketSequences.set(event.channel, Math.max(previous, event.seq));
+    }
+    return HttpResponse.json({ ok: true }, { headers: corsHeaders });
+  }),
+  http.post(`${api}/__mocks/ws/drop`, async ({ request }) => {
+    let body: unknown = {};
+    try {
+      body = await request.json();
+    } catch {
+      return HttpResponse.json({ error: "Invalid drop" }, { status: 400, headers: corsHeaders });
+    }
+    const code = isRecord(body) && typeof body.code === "number" ? body.code : 4000;
+    if (!Number.isInteger(code)) {
+      return HttpResponse.json({ error: "Invalid drop" }, { status: 400, headers: corsHeaders });
+    }
+    if (isRecord(body) && typeof body.blocked === "boolean") socketBlocked = body.blocked;
+    engineSocket.clients.forEach((client) => client.close(code));
+    return HttpResponse.json({ ok: true }, { headers: corsHeaders });
+  }),
   http.post(`${api}/__mocks/reset`, () => {
     resetAccountMocks();
     resetIdempotency();
@@ -690,8 +926,15 @@ export const handlers = [
     commandRows.forEach((row) => {
       const count = (commandPolls.get(Number(row.id)) ?? 0) + 1;
       commandPolls.set(Number(row.id), count);
-      if (row.status === "pending" && count >= 2) row.status = "executing";
-      if (row.status === "executing" && count >= 3) row.status = "done";
+      if (row.status === "pending" && count >= 2) {
+        row.status = "executing";
+        emitCommand(row);
+      }
+      if (row.status === "executing" && count >= 3) {
+        row.status = "done";
+        row.finished_at = new Date().toISOString();
+        emitCommand(row);
+      }
     });
     return HttpResponse.json(
       list(commandRows.length ? commandRows : [{ ...command, status: "done" }]),
@@ -700,13 +943,9 @@ export const handlers = [
   http.get(`${api}/api/engine/v1/systems/:id/shadow-reports/`, () => HttpResponse.json(list([]))),
   http.get(`${api}/api/engine/v1/backtests/`, () => HttpResponse.json(list([backtestJob]))),
   http.get(`${api}/api/engine/v1/backtests/:id/`, ({ params }) => {
-    if (Number(params.id) !== 2) return HttpResponse.json(backtestJob);
-    queuedBacktestPolls += 1;
-    return HttpResponse.json(
-      queuedBacktestPolls < 2
-        ? { ...backtestJob, id: 2, status: "queued", progress: 0, metrics: null }
-        : { ...backtestJob, id: 2 },
-    );
+    const id = Number(params.id);
+    if (id === 2 || id === 3) return HttpResponse.json(queuedBacktest(id));
+    return HttpResponse.json(backtestJob);
   }),
   http.get(`${api}/api/engine/v1/backtests/:id/equity/`, () =>
     HttpResponse.json({ t: [1730811600000], value: ["10000"], drawdown: [0] }),
@@ -849,6 +1088,7 @@ export const handlers = [
     system.desired_state = "running";
     system.state = "running";
     system.allowed_actions = ["stop", "new_order"];
+    emitSystemState(system);
     return HttpResponse.json(system, { status: 202 });
   }),
   http.post(`${api}/api/engine/v1/systems/:id/stop/`, async ({ params, request }) => {
@@ -883,6 +1123,8 @@ export const handlers = [
       rejected.status = "rejected";
       rejected.reason = "risk_rejected";
       rejected.result = { risk_reason: "max order notional" };
+      rejected.finished_at = new Date().toISOString();
+      emitCommand(rejected);
       return HttpResponse.json(rejected, { status: 202 });
     }
     if (body.type !== "market") {
@@ -996,7 +1238,10 @@ export const handlers = [
     }
     const response = { ...backtestJob, id: 3, status: "queued" as const, progress: 0 };
     const cached = await idempotent(request, response);
-    return cached ?? HttpResponse.json(response, { status: 201 });
+    if (cached) return cached;
+    backtestStates.set(3, { status: "queued", progress: 0, scheduled: false });
+    scheduleBacktest(3);
+    return HttpResponse.json(response, { status: 201 });
   }),
   http.post(`${api}/api/engine/v1/backtests/:id/cancel/`, () =>
     HttpResponse.json({ id: 1, status: "cancelled" }, { status: 202 }),

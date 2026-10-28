@@ -8,6 +8,7 @@ import {
 } from "@/lib/ws/socket";
 
 class FakeSocket implements SocketLike {
+  readyState = 0;
   onopen: ((event: Event) => void) | null = null;
   onmessage: ((event: MessageEvent<unknown>) => void) | null = null;
   onclose: ((event: CloseEvent) => void) | null = null;
@@ -16,15 +17,18 @@ class FakeSocket implements SocketLike {
   closed: number[] = [];
 
   send(data: string): void {
+    if (this.readyState !== 1) throw new Error("Socket is not open");
     this.sent.push(data);
   }
 
   close(code = 1000): void {
+    this.readyState = 3;
     this.closed.push(code);
     this.onclose?.({ code } as CloseEvent);
   }
 
   open(): void {
+    this.readyState = 1;
     this.onopen?.({} as Event);
   }
 
@@ -64,6 +68,14 @@ afterEach(() => {
 });
 
 describe("EngineSocket", () => {
+  it("drops unsubscribe sends before a socket opens", () => {
+    const { socket, sockets } = setup();
+    socket.start();
+    const unsubscribe = socket.subscribe("portfolio");
+    expect(() => unsubscribe()).not.toThrow();
+    expect(sockets[0].sent).toEqual([]);
+  });
+
   it("authenticates before subscribing and serializes acknowledgements", () => {
     const { socket, sockets } = setup();
     socket.start();

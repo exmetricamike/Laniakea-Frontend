@@ -21,6 +21,7 @@ export const useLiveStatus = create<LiveStatusState>((set) => ({
 }));
 
 export type SocketLike = {
+  readyState: number;
   onopen: ((event: Event) => void) | null;
   onmessage: ((event: MessageEvent<unknown>) => void) | null;
   onclose: ((event: CloseEvent) => void) | null;
@@ -50,6 +51,7 @@ const AUTH_TIMEOUT_MS = 5_000;
 const PAUSE_TIMEOUT_MS = 10_000;
 const MAX_BACKOFF_MS = 30_000;
 const MAX_SUBSCRIPTIONS = 50;
+const SOCKET_OPEN = 1;
 
 function socketUrl(): string {
   const configured = process.env.NEXT_PUBLIC_WS_URL;
@@ -349,7 +351,8 @@ export class EngineSocket {
   }
 
   private send(payload: Record<string, string>): void {
-    this.socket?.send(JSON.stringify(payload));
+    if (this.socket?.readyState !== SOCKET_OPEN) return;
+    this.socket.send(JSON.stringify(payload));
   }
 
   private clearAuthTimer(): void {
