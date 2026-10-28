@@ -5,6 +5,7 @@ import { useRef } from "react";
 import { api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/keys";
 import { strategyApiPath } from "@/lib/api/strategy";
+import { useLivePollInterval } from "@/lib/ws/poll";
 import type {
   Account,
   AccountBalance,
@@ -51,6 +52,7 @@ function list<T>(value: T[] | PaginatedList<T>): PaginatedList<T> {
 }
 
 export function usePortfolioSummary(mode: string, period: string, includeStopped: boolean) {
+  const poll = useLivePollInterval({ connecting: 10_000, paused: 15_000 });
   return useQuery({
     queryKey: queryKeys.portfolio.summary(mode, period, includeStopped),
     queryFn: () =>
@@ -61,7 +63,7 @@ export function usePortfolioSummary(mode: string, period: string, includeStopped
           include_stopped: includeStopped ? "true" : "false",
         })}`,
       ),
-    refetchInterval: 10_000,
+    refetchInterval: poll,
   });
 }
 export function usePortfolioEquity(mode: string, from: string | undefined) {
@@ -127,6 +129,7 @@ export function useSystems(filters: SystemsFilters) {
   });
 }
 export function useSystemsInfinite(filters: SystemsFilters) {
+  const poll = useLivePollInterval({ connecting: 3_000, paused: 3_000 });
   return useInfiniteQuery({
     queryKey: queryKeys.systems(filters),
     initialPageParam: "",
@@ -140,18 +143,19 @@ export function useSystemsInfinite(filters: SystemsFilters) {
     },
     refetchInterval: (query) => {
       const rows = query.state.data?.pages.flatMap((page) => page.results) ?? [];
-      return rows.some((row) => row.desired_state !== row.state) ? 3_000 : false;
+      return rows.some((row) => row.desired_state !== row.state) ? poll : false;
     },
   });
 }
 export function useSystem(id: number, options: { poll?: boolean; enabled?: boolean } = {}) {
+  const poll = useLivePollInterval({ connecting: 5_000, paused: 5_000 });
   return useQuery({
     queryKey: queryKeys.system.detail(id),
     queryFn: () => api.get<TradingSystem>(`/api/engine/v1/systems/${id}/`),
     enabled: id > 0 && (options.enabled ?? true),
     refetchInterval: (query) =>
       options.poll && ["running", "starting", "stopping"].includes(query.state.data?.state ?? "")
-        ? 5_000
+        ? poll
         : false,
   });
 }
@@ -163,6 +167,7 @@ function useSystemList<T>(
   key: readonly unknown[],
   options: SystemQueryOptions,
 ) {
+  const poll = useLivePollInterval({ connecting: 5_000, paused: 5_000 });
   return useInfiniteQuery({
     queryKey: key,
     initialPageParam: "",
@@ -173,7 +178,7 @@ function useSystemList<T>(
       ),
     getNextPageParam: (page) =>
       page.next ? (new URL(page.next).searchParams.get("cursor") ?? undefined) : undefined,
-    refetchInterval: options.poll ? 5_000 : false,
+    refetchInterval: options.poll ? poll : false,
   });
 }
 export function useSystemOrders(
@@ -243,6 +248,7 @@ export function useSystemCommands(
 }
 export function useCommandStatus(systemId: number, commandId: number | null) {
   const started = useRef<number | null>(null);
+  const poll = useLivePollInterval({ connecting: 1_000, paused: 1_000 });
   return useQuery({
     queryKey: ["system", systemId, "command-status", commandId],
     enabled: commandId !== null,
@@ -257,32 +263,35 @@ export function useCommandStatus(systemId: number, commandId: number | null) {
     refetchInterval: (query) => {
       if (started.current && Date.now() - started.current >= 120_000) return false;
       const status = query.state.data?.status;
-      return status === "done" || status === "rejected" ? false : 1_000;
+      return status === "done" || status === "rejected" ? false : poll;
     },
   });
 }
 export function useSystemPosition(id: number, options: SystemQueryOptions = {}) {
+  const poll = useLivePollInterval({ connecting: 5_000, paused: 5_000 });
   return useQuery({
     queryKey: queryKeys.system.position(id),
     queryFn: () => api.get<SystemPosition>(`/api/engine/v1/systems/${id}/position/`),
     enabled: options.enabled ?? true,
-    refetchInterval: options.poll ? 5_000 : false,
+    refetchInterval: options.poll ? poll : false,
   });
 }
 export function useSystemEquity(id: number, options: SystemQueryOptions = {}) {
+  const poll = useLivePollInterval({ connecting: 5_000, paused: 5_000 });
   return useQuery({
     queryKey: queryKeys.system.equity(id, "default"),
     queryFn: () => api.get<SystemEquity>(`/api/engine/v1/systems/${id}/equity/`),
     enabled: options.enabled ?? true,
-    refetchInterval: options.poll ? 5_000 : false,
+    refetchInterval: options.poll ? poll : false,
   });
 }
 export function useSystemChart(id: number, options: SystemQueryOptions = {}) {
+  const poll = useLivePollInterval({ connecting: 5_000, paused: 5_000 });
   return useQuery({
     queryKey: queryKeys.system.chart(id, "default"),
     queryFn: () => api.get<ChartPayload>(`/api/engine/v1/systems/${id}/chart/`),
     enabled: options.enabled ?? true,
-    refetchInterval: options.poll ? 5_000 : false,
+    refetchInterval: options.poll ? poll : false,
   });
 }
 export function useSystemPerformance(
@@ -290,6 +299,7 @@ export function useSystemPerformance(
   from: string | undefined,
   options: SystemQueryOptions = {},
 ) {
+  const poll = useLivePollInterval({ connecting: 5_000, paused: 5_000 });
   return useQuery({
     queryKey: queryKeys.system.performance(id, from ?? "all"),
     queryFn: () =>
@@ -297,7 +307,7 @@ export function useSystemPerformance(
         `/api/engine/v1/systems/${id}/performance/${queryString({ from })}`,
       ),
     enabled: options.enabled ?? true,
-    refetchInterval: options.poll ? 5_000 : false,
+    refetchInterval: options.poll ? poll : false,
   });
 }
 export function useStrategies() {
@@ -357,6 +367,7 @@ export function useBacktests(filters: Record<string, string>) {
   return useBacktestsInfinite(filters);
 }
 export function useBacktest(id: number, options: { poll?: boolean } = {}) {
+  const poll = useLivePollInterval({ connecting: 2_000, paused: 2_000 });
   return useQuery({
     queryKey: queryKeys.backtest(id),
     queryFn: () => api.get<BacktestJob>(`/api/engine/v1/backtests/${id}/`),
@@ -364,7 +375,7 @@ export function useBacktest(id: number, options: { poll?: boolean } = {}) {
     refetchInterval: (query) =>
       options.poll &&
       (query.state.data?.status === "queued" || query.state.data?.status === "running")
-        ? 2_000
+        ? poll
         : false,
   });
 }
@@ -452,13 +463,14 @@ export function useBacktestChart(id: number, enabled: boolean) {
   });
 }
 export function useKillSwitches() {
+  const poll = useLivePollInterval({ connecting: 10_000, paused: 10_000 });
   return useQuery({
     queryKey: queryKeys.risk(),
     queryFn: async () =>
       list(
         await api.get<KillSwitch[] | PaginatedList<KillSwitch>>("/api/engine/v1/kill-switches/"),
       ),
-    refetchInterval: 10_000,
+    refetchInterval: poll,
   });
 }
 export function useOperatorSystems() {

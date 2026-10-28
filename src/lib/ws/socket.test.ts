@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { EngineSocket, type SocketLike, useLiveStatus } from "@/lib/ws/socket";
+import {
+  destroyLiveSocket,
+  EngineSocket,
+  startLiveSocket,
+  type SocketLike,
+  useLiveStatus,
+} from "@/lib/ws/socket";
 
 class FakeSocket implements SocketLike {
   onopen: ((event: Event) => void) | null = null;
@@ -52,6 +58,7 @@ async function flush(): Promise<void> {
 }
 
 afterEach(() => {
+  destroyLiveSocket();
   vi.useRealTimers();
   useLiveStatus.getState().setStatus("connecting");
 });
@@ -73,6 +80,32 @@ describe("EngineSocket", () => {
     expect(message(connection, 2)).toEqual({ action: "subscribe", channel: "system.42" });
     connection.receive({ type: "subscribed", channel: "system.42" });
     expect(useLiveStatus.getState().status).toBe("connected");
+  });
+
+  it("uses provider handlers when a channel starts the singleton first", () => {
+    const sockets: FakeSocket[] = [];
+    const childSocket = startLiveSocket({
+      createSocket: () => {
+        const fake = new FakeSocket();
+        sockets.push(fake);
+        return fake;
+      },
+      accessToken: () => "access",
+    });
+    childSocket.subscribe("system.42");
+    const onEvent = vi.fn();
+    startLiveSocket({ onEvent });
+    sockets[0].open();
+    sockets[0].receive({ type: "auth.ok" });
+    sockets[0].receive({ type: "subscribed", channel: "system.42" });
+    sockets[0].receive({
+      type: "position",
+      channel: "system.42",
+      seq: 1,
+      time: "now",
+      data: { size: "1" },
+    });
+    expect(onEvent).toHaveBeenCalledOnce();
   });
 
   it("re-subscribes serially after reconnect", () => {

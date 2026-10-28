@@ -21,7 +21,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { clearTokens } from "@/lib/auth";
-import { LiveSocketProvider } from "@/lib/ws/socket";
+import { LiveSocketProvider, useLiveStatus } from "@/lib/ws/socket";
 import { KillSwitchDialog } from "@/components/controls/kill-switch-dialog";
 import { useKillSwitches, useMe, useSystems } from "@/lib/api/queries";
 import { cn } from "@/lib/utils";
@@ -186,8 +186,15 @@ function UserMenu({ user }: { user: User | null }) {
 
 function TopBar({ user }: { user: User | null }) {
   const switches = useKillSwitches();
+  const liveStatus = useLiveStatus((state) => state.status);
   const [open, setOpen] = useState(false);
   const tenant = switches.data?.results.find((item) => item.scope === "tenant");
+  const liveLabel = `Live updates ${liveStatus}`;
+  const dotColor = {
+    connected: "bg-green-500",
+    connecting: "bg-amber-400",
+    paused: "bg-zinc-500",
+  }[liveStatus];
   return (
     <header className="flex min-h-16 items-center justify-between border-b px-4 md:px-6">
       <ModeToggle />
@@ -211,14 +218,14 @@ function TopBar({ user }: { user: User | null }) {
             </Button>
           </span>
         </Hint>
-        <Hint text="Live updates: offline">
-          <span
-            aria-label="Live updates: offline"
-            className="inline-flex size-7 items-center justify-center"
-          >
-            <span className="size-2 rounded-full bg-zinc-500" />
+        <Hint text={liveLabel}>
+          <span aria-label={liveLabel} className="inline-flex size-7 items-center justify-center">
+            <span className={`size-2 rounded-full ${dotColor}`} />
           </span>
         </Hint>
+        {liveStatus === "paused" ? (
+          <span className="text-xs text-[var(--muted-foreground)]">Live updates paused</span>
+        ) : null}
         <UserMenu user={user} />
       </div>
       <KillSwitchDialog

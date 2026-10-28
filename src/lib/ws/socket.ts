@@ -1,13 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { create } from "zustand";
-import {
-  handleSessionExpired,
-  refreshAccessToken,
-  registerSessionExpired,
-} from "@/lib/api/client";
+import { handleSessionExpired, refreshAccessToken, registerSessionExpired } from "@/lib/api/client";
 import { getAccess } from "@/lib/auth";
+import { handleEngineEvent, onGap, onResync } from "@/lib/ws/handlers";
 import { parseServerFrame, type EngineEvent } from "@/lib/ws/events";
 
 export type LiveStatus = "connected" | "connecting" | "paused";
@@ -35,7 +33,7 @@ export type SocketFactory = (url: string) => SocketLike;
 
 type Timer = ReturnType<typeof setTimeout>;
 
-type EngineSocketOptions = {
+export type EngineSocketOptions = {
   createSocket?: SocketFactory;
   accessToken?: () => string | null;
   refresh?: () => Promise<boolean>;
@@ -43,7 +41,7 @@ type EngineSocketOptions = {
   random?: () => number;
   onEvent?: (event: EngineEvent) => void;
   onGap?: (channel: string) => void;
-  onResync?: () => void;
+  onResync?: (channels: string[]) => void;
 };
 
 type DesiredChannel = { count: number; order: number };
@@ -79,9 +77,9 @@ export class EngineSocket {
   private readonly refresh: () => Promise<boolean>;
   private readonly expireSession: () => void;
   private readonly random: () => number;
-  private readonly onEvent: (event: EngineEvent) => void;
-  private readonly onGap: (channel: string) => void;
-  private readonly onResync: () => void;
+  private onEvent: (event: EngineEvent) => void;
+  private onGap: (channel: string) => void;
+  private onResync: (channels: string[]) => void;
   private readonly desired = new Map<string, DesiredChannel>();
   private readonly acknowledged = new Set<string>();
   private readonly sequences = new Map<string, number>();
@@ -113,6 +111,12 @@ export class EngineSocket {
   start(): void {
     this.destroyed = false;
     this.connect();
+  }
+
+  setHandlers(options: EngineSocketOptions): void {
+    if (options.onEvent) this.onEvent = options.onEvent;
+    if (options.onGap) this.onGap = options.onGap;
+    if (options.onResync) this.onResync = options.onResync;
   }
 
   destroy(): void {
@@ -264,7 +268,7 @@ export class EngineSocket {
     useLiveStatus.getState().setStatus("connected");
     if (this.reconnecting) {
       this.reconnecting = false;
-      this.onResync();
+      this.onResync([...this.acknowledged]);
     }
   }
 
@@ -377,8 +381,9 @@ export class EngineSocket {
 
 let singleton: EngineSocket | null = null;
 
-export function startLiveSocket(): EngineSocket {
-  singleton ??= new EngineSocket();
+export function startLiveSocket(options: EngineSocketOptions = {}): EngineSocket {
+  if (singleton) singleton.setHandlers(options);
+  else singleton = new EngineSocket(options);
   singleton.start();
   return singleton;
 }
@@ -396,8 +401,13 @@ export function useLiveChannel(channel: string, enabled: boolean): void {
 }
 
 export function LiveSocketProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   useEffect(() => {
-    const socket = startLiveSocket();
+    const socket = startLiveSocket({
+      onEvent: (event) => handleEngineEvent(queryClient, event),
+      onGap: (channel) => onGap(queryClient, channel),
+      onResync: (channels) => onResync(queryClient, channels),
+    });
     const unsubscribe = socket.subscribe("portfolio");
     const unregister = registerSessionExpired(destroyLiveSocket);
     return () => {
@@ -405,9 +415,8 @@ export function LiveSocketProvider({ children }: { children: React.ReactNode }) 
       unsubscribe();
       destroyLiveSocket();
     };
-  }, []);
+  }, [queryClient]);
   return children;
 }
 
 export const __socketUrlForTests = socketUrl;
-
