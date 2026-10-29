@@ -12,6 +12,7 @@ import {
 import type { EngineEvent, SystemStateEvent } from "@/lib/ws/events";
 import type {
   BacktestStatus,
+  Health,
   OperatorStrategy,
   OperatorSystem,
   SystemCommand,
@@ -107,6 +108,8 @@ const balancePolls = new Map<number, number>();
 let failNextVersionDetail = false;
 let failNextStart = false;
 let blockNextStart = false;
+let failNextOperatorPublishConflict = false;
+let hideOperatorEvidence = false;
 const operatorSystems: OperatorSystem[] = systems.map((system, index) => ({
   ...system,
   allowed_actions: [],
@@ -173,7 +176,7 @@ const auditRows = [
     ip: "127.0.0.1",
   },
 ];
-const health = {
+const initialHealth: Health = {
   supervisor: { alive: true, error: null },
   workers: { running: 1, stopped: 2 },
   heartbeats: [{ system: 43, state: "running", age_s: 5 }],
@@ -185,6 +188,7 @@ const health = {
   db: { ok: true, latency_ms: 1, error: null },
   time: "2026-10-22T10:00:00Z",
 };
+let health = structuredClone(initialHealth);
 const list = <T>(results: T[]) => ({ results, next: null, count: results.length });
 function portfolioFixture(): "default" | "large" | "empty" | "paper-only" {
   if (typeof localStorage === "undefined") return "default";
@@ -524,6 +528,9 @@ export function resetAccountMocks(): void {
   failNextVersionDetail = false;
   failNextStart = false;
   blockNextStart = false;
+  failNextOperatorPublishConflict = false;
+  hideOperatorEvidence = false;
+  health = structuredClone(initialHealth);
   backtestStates.clear();
   backtestTimers.forEach((timer) => clearTimeout(timer));
   backtestTimers.clear();
@@ -628,6 +635,30 @@ export const handlers = [
   }),
   http.post(`${api}/__mocks/fail-next/system-start-blockers`, () => {
     blockNextStart = true;
+    return new HttpResponse(null, {
+      status: 204,
+      headers: { "Access-Control-Allow-Origin": "*" },
+    });
+  }),
+  http.post(`${api}/__mocks/fail-next/operator-publish-conflict`, () => {
+    failNextOperatorPublishConflict = true;
+    return new HttpResponse(null, {
+      status: 204,
+      headers: { "Access-Control-Allow-Origin": "*" },
+    });
+  }),
+  http.post(`${api}/__mocks/operator/no-evidence`, () => {
+    hideOperatorEvidence = true;
+    return new HttpResponse(null, {
+      status: 204,
+      headers: { "Access-Control-Allow-Origin": "*" },
+    });
+  }),
+  http.post(`${api}/__mocks/operator/redis-unavailable`, () => {
+    health = {
+      ...health,
+      redis: { ok: false, latency_ms: null, error: "Redis unavailable" },
+    };
     return new HttpResponse(null, {
       status: 204,
       headers: { "Access-Control-Allow-Origin": "*" },
@@ -1055,9 +1086,13 @@ export const handlers = [
   http.get(`${api}/api/engine/v1/systems/:id/shadow-reports/`, () => HttpResponse.json(list([]))),
   http.get(`${api}/api/engine/v1/backtests/`, ({ request }) => {
     const version = new URL(request.url).searchParams.get("version");
-    return HttpResponse.json(
-      list(version === "1.1.0" ? [operatorEvidenceBacktest] : [backtestJob]),
-    );
+    const results =
+      version === "1.1.0"
+        ? hideOperatorEvidence
+          ? []
+          : [operatorEvidenceBacktest]
+        : [backtestJob];
+    return HttpResponse.json(list(results));
   }),
   http.get(`${api}/api/engine/v1/backtests/:id/`, ({ params }) => {
     const id = Number(params.id);
@@ -1400,6 +1435,10 @@ export const handlers = [
     async ({ request, params }) => {
       const denied = operatorError(request);
       if (denied) return denied;
+      if (failNextOperatorPublishConflict) {
+        failNextOperatorPublishConflict = false;
+        return error("conflict", "Version is already published.", 409);
+      }
       const body = (await request.json()) as { version?: string };
       const key = `${params.family}/${params.name}`;
       const strategy = operatorStrategies.find((item) => item.key === key);
