@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { auditTarget, isStaleHeartbeat } from "@/lib/operator";
+import { auditTarget, formatAge, isStaleHeartbeat } from "@/lib/operator";
 
 describe("operator helpers", () => {
   it("formats audit targets consistently", () => {
@@ -11,5 +11,11 @@ describe("operator helpers", () => {
     expect(isStaleHeartbeat(60)).toBe(false);
     expect(isStaleHeartbeat(61)).toBe(true);
     expect(isStaleHeartbeat(null)).toBe(false);
+  });
+
+  it("formats ages without fractional seconds", () => {
+    expect(formatAge(8.621915)).toBe("8 s");
+    expect(formatAge(532349.213369)).toBe("6 d 3 h");
+    expect(formatAge(null)).toBe("—");
   });
 });

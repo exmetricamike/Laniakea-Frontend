@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import Decimal from "decimal.js-light";
 import { AlertTriangle } from "lucide-react";
 import { toast } from "react-toastify";
 import { Badge } from "@/components/ui/badge";
@@ -49,7 +50,7 @@ import {
   useOperatorSystemsInfinite,
   useStrategies,
 } from "@/lib/api/queries";
-import { auditTarget, compactJson, isStaleHeartbeat } from "@/lib/operator";
+import { auditTarget, compactJson, formatAge, isStaleHeartbeat } from "@/lib/operator";
 import type { AuditLogRow, OperatorStrategy, OperatorSystem } from "@/lib/api/types";
 
 const TAB_VALUES = ["systems", "strategies", "kill-switch", "audit", "health"] as const;
@@ -83,6 +84,15 @@ function heartbeatAge(value: string | null): string {
   const seconds = Math.max(0, Math.floor((Date.now() - Date.parse(value)) / 1000));
   if (!Number.isFinite(seconds)) return "—";
   return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m`;
+}
+
+function money(value: string | null | undefined): string {
+  return value === null || value === undefined ? "—" : new Decimal(value).toFixed(2);
+}
+
+function localTime(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
 }
 
 function stateBadge(state: OperatorSystem["state"]) {
@@ -272,50 +282,52 @@ function OperatorSystemsTab({ filters, setFilters, systems, ownEmail }: SystemsT
 
 function OperatorSystemsTable({ rows, ownEmail }: { rows: OperatorSystem[]; ownEmail: string }) {
   return (
-    <Table className="min-w-[1000px] whitespace-nowrap text-xs">
-      <TableHeader>
-        <TableRow>
-          <TableHead>Owner</TableHead>
-          <TableHead>Name</TableHead>
-          <TableHead>Mode</TableHead>
-          <TableHead>State</TableHead>
-          <TableHead>Strategy</TableHead>
-          <TableHead>Instrument</TableHead>
-          <TableHead>PnL</TableHead>
-          <TableHead>Heartbeat</TableHead>
-          <TableHead>Manual</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((system) => (
-          <TableRow key={system.id}>
-            <TableCell>{system.owner.email}</TableCell>
-            <TableCell>
-              {system.owner.email === ownEmail ? (
-                <Link className="underline" href={`/systems/${system.id}`}>
-                  {system.name}
-                </Link>
-              ) : (
-                system.name
-              )}
-            </TableCell>
-            <TableCell>
-              <ModeBadge mode={system.mode} />
-            </TableCell>
-            <TableCell>{stateBadge(system.state)}</TableCell>
-            <TableCell>
-              {system.strategy}@{system.version}
-            </TableCell>
-            <TableCell>
-              {system.instrument.venue}:{system.instrument.symbol}
-            </TableCell>
-            <TableCell>{system.net_pnl}</TableCell>
-            <TableCell>{heartbeatAge(system.heartbeat_at)}</TableCell>
-            <TableCell>{system.manual_intervention ? "Yes" : "—"}</TableCell>
+    <div className="overflow-x-auto">
+      <Table className="min-w-[1000px] whitespace-nowrap text-xs">
+        <TableHeader>
+          <TableRow>
+            <TableHead>Owner</TableHead>
+            <TableHead>Name</TableHead>
+            <TableHead>Mode</TableHead>
+            <TableHead>State</TableHead>
+            <TableHead>Strategy</TableHead>
+            <TableHead>Instrument</TableHead>
+            <TableHead>PnL</TableHead>
+            <TableHead>Heartbeat</TableHead>
+            <TableHead>Manual</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {rows.map((system) => (
+            <TableRow key={system.id}>
+              <TableCell>{system.owner.email}</TableCell>
+              <TableCell>
+                {system.owner.email === ownEmail ? (
+                  <Link className="underline" href={`/systems/${system.id}`}>
+                    {system.name}
+                  </Link>
+                ) : (
+                  system.name
+                )}
+              </TableCell>
+              <TableCell>
+                <ModeBadge mode={system.mode} />
+              </TableCell>
+              <TableCell>{stateBadge(system.state)}</TableCell>
+              <TableCell>
+                {system.strategy}@{system.version}
+              </TableCell>
+              <TableCell>
+                {system.instrument.venue}:{system.instrument.symbol}
+              </TableCell>
+              <TableCell>{money(system.net_pnl)}</TableCell>
+              <TableCell>{heartbeatAge(system.heartbeat_at)}</TableCell>
+              <TableCell>{system.manual_intervention ? "Yes" : "—"}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
 
@@ -605,33 +617,35 @@ function AuditLogTab({
 
 function AuditTable({ rows }: { rows: AuditLogRow[] }) {
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Time</TableHead>
-          <TableHead>Actor</TableHead>
-          <TableHead>Action</TableHead>
-          <TableHead>Target</TableHead>
-          <TableHead>Data</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((row) => (
-          <TableRow key={row.id}>
-            <TableCell>{row.time}</TableCell>
-            <TableCell>{row.actor?.email ?? "System"}</TableCell>
-            <TableCell>{row.action}</TableCell>
-            <TableCell>{auditTarget(row.target_type, row.target_id)}</TableCell>
-            <TableCell>
-              <details>
-                <summary>{compactJson(row.data).slice(0, 80)}</summary>
-                <pre>{JSON.stringify(row.data, null, 2)}</pre>
-              </details>
-            </TableCell>
+    <div className="overflow-x-auto">
+      <Table className="whitespace-nowrap">
+        <TableHeader>
+          <TableRow>
+            <TableHead>Time</TableHead>
+            <TableHead>Actor</TableHead>
+            <TableHead>Action</TableHead>
+            <TableHead>Target</TableHead>
+            <TableHead>Data</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row) => (
+            <TableRow key={row.id}>
+              <TableCell className="whitespace-nowrap">{localTime(row.time)}</TableCell>
+              <TableCell>{row.actor?.email ?? "System"}</TableCell>
+              <TableCell>{row.action}</TableCell>
+              <TableCell>{auditTarget(row.target_type, row.target_id)}</TableCell>
+              <TableCell>
+                <details>
+                  <summary>{compactJson(row.data).slice(0, 80)}</summary>
+                  <pre>{JSON.stringify(row.data, null, 2)}</pre>
+                </details>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
 
@@ -677,7 +691,7 @@ function HealthTab({ query }: { query: ReturnType<typeof useHealth> }) {
           <h2 className="font-semibold">Heartbeats</h2>
           {heartbeats.map((item) => (
             <p key={item.system} className={isStaleHeartbeat(item.age_s) ? "text-red-500" : ""}>
-              #{item.system} {item.state}: {item.age_s ?? "—"}s
+              #{item.system} {item.state}: {formatAge(item.age_s)}
             </p>
           ))}
         </CardContent>
@@ -687,8 +701,8 @@ function HealthTab({ query }: { query: ReturnType<typeof useHealth> }) {
           <h2 className="font-semibold">Markets</h2>
           {health.markets.map((market) => (
             <p key={market.key}>
-              {market.key}: lag {market.lag_s ?? "—"}s, heartbeat{" "}
-              {market.heartbeat_age_s ?? "—"}s, gaps {market.gaps}
+              {market.key}: lag {formatAge(market.lag_s)}, heartbeat{" "}
+              {formatAge(market.heartbeat_age_s)}, gaps {market.gaps}
               {market.last_error ? `, ${market.last_error}` : ""}
             </p>
           ))}
