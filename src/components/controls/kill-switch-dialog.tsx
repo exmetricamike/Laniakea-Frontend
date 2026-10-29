@@ -18,6 +18,7 @@ export function KillSwitchDialog({
   active,
   accountId,
   label,
+  onForbidden,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -25,6 +26,7 @@ export function KillSwitchDialog({
   active: boolean;
   accountId?: number;
   label?: string;
+  onForbidden?: () => void;
 }) {
   const setSwitch = useSetKillSwitch();
   const setGlobal = useSetGlobalKillSwitch();
@@ -43,6 +45,7 @@ export function KillSwitchDialog({
       onOpenChange(false);
     };
     const onError = (value: ApiError) => {
+      if (value.status === 403) onForbidden?.();
       const fieldErrors = value.fields
         ? Object.values(value.fields).flatMap((field) =>
             Array.isArray(field)

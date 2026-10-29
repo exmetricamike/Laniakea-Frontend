@@ -178,7 +178,10 @@ function useSystemList<T>(
     enabled: options.enabled ?? true,
     queryFn: ({ pageParam }) =>
       api.get<PaginatedList<T>>(
-        `/api/engine/v1/systems/${id}/${resource}/${queryString({ ...filters, cursor: String(pageParam) })}`,
+        `/api/engine/v1/systems/${id}/${resource}/${queryString({
+          ...filters,
+          cursor: String(pageParam),
+        })}`,
       ),
     getNextPageParam: (page) =>
       page.next ? (new URL(page.next).searchParams.get("cursor") ?? undefined) : undefined,
@@ -353,9 +356,13 @@ export function useStrategyVersion(key: string, version: string | null) {
     enabled: version !== null,
   });
 }
-export function useBacktestsInfinite(filters: Record<string, string>) {
+export function useBacktestsInfinite(
+  filters: Record<string, string>,
+  options: { enabled?: boolean } = {},
+) {
   return useInfiniteQuery({
     queryKey: queryKeys.backtests(filters),
+    enabled: options.enabled ?? true,
     initialPageParam: "",
     queryFn: ({ pageParam }) =>
       api.get<PaginatedList<Backtest>>(

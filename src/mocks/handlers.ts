@@ -10,7 +10,13 @@ import {
   venues,
 } from "@/mocks/fixtures/data";
 import type { EngineEvent, SystemStateEvent } from "@/lib/ws/events";
-import type { BacktestStatus, OperatorSystem, SystemCommand, SystemOrder } from "@/lib/api/types";
+import type {
+  BacktestStatus,
+  OperatorStrategy,
+  OperatorSystem,
+  SystemCommand,
+  SystemOrder,
+} from "@/lib/api/types";
 
 const api = "http://localhost:8000";
 const engineSocket = ws.link(`${api}/ws/engine/`);
@@ -83,6 +89,7 @@ type MockKillSwitch = {
   set_at: string | null;
 };
 let killSwitchRows: MockKillSwitch[] = [
+  { scope: "global", target: null, active: false, reason: "", set_by: null, set_at: null },
   { scope: "tenant" as const, target: null, active: false, reason: "", set_by: null, set_at: null },
   {
     scope: "account" as const,
@@ -108,7 +115,7 @@ const operatorSystems: OperatorSystem[] = systems.map((system, index) => ({
       ? { id: 1, email: "ops@example.test" }
       : { id: 2, email: "tenant@example.test" },
 }));
-const operatorStrategies = [
+const initialOperatorStrategies: OperatorStrategy[] = [
   {
     key: "atr_strategies/atr_allocation",
     title: "ATR allocation",
@@ -130,6 +137,7 @@ const operatorStrategies = [
     ],
   },
 ];
+let operatorStrategies = structuredClone(initialOperatorStrategies);
 const operatorVersionResponse = {
   key: "atr_strategies/atr_allocation",
   version: "1.1.0",
@@ -152,6 +160,16 @@ const auditRows = [
     target_type: "trading_system",
     target_id: "42",
     data: { name: "Paper trend" },
+    ip: "127.0.0.1",
+  },
+  {
+    id: 2,
+    time: "2026-10-22T09:00:00Z",
+    actor: { id: 2, email: "tenant@example.test" },
+    action: "system.stop",
+    target_type: "trading_system",
+    target_id: "43",
+    data: { policy: "flatten" },
     ip: "127.0.0.1",
   },
 ];
@@ -422,6 +440,11 @@ const backtestJob = {
   engine_revision: "mock",
   trades_count: 1,
 };
+const operatorEvidenceBacktest = {
+  ...backtestJob,
+  id: 2,
+  version: "1.1.0",
+};
 type MockBacktestState = {
   status: BacktestStatus;
   progress: number;
@@ -513,6 +536,7 @@ export function resetAccountMocks(): void {
   socketSequences.clear();
   socketBlocked = false;
   killSwitchRows = [
+    { scope: "global", target: null, active: false, reason: "", set_by: null, set_at: null },
     { scope: "tenant", target: null, active: false, reason: "", set_by: null, set_at: null },
     {
       scope: "account",
@@ -523,6 +547,7 @@ export function resetAccountMocks(): void {
       set_at: "2026-10-22T10:00:00Z",
     },
   ];
+  operatorStrategies = structuredClone(initialOperatorStrategies);
   nextSystemId = Math.max(...systemRows.map((item) => item.id)) + 1;
 }
 export async function idempotent(
@@ -1028,7 +1053,12 @@ export const handlers = [
     );
   }),
   http.get(`${api}/api/engine/v1/systems/:id/shadow-reports/`, () => HttpResponse.json(list([]))),
-  http.get(`${api}/api/engine/v1/backtests/`, () => HttpResponse.json(list([backtestJob]))),
+  http.get(`${api}/api/engine/v1/backtests/`, ({ request }) => {
+    const version = new URL(request.url).searchParams.get("version");
+    return HttpResponse.json(
+      list(version === "1.1.0" ? [operatorEvidenceBacktest] : [backtestJob]),
+    );
+  }),
   http.get(`${api}/api/engine/v1/backtests/:id/`, ({ params }) => {
     const id = Number(params.id);
     if (id === 2 || id === 3) return HttpResponse.json(queuedBacktest(id));
@@ -1085,7 +1115,13 @@ export const handlers = [
       open_orders: [],
     }),
   ),
-  http.get(`${api}/api/engine/v1/kill-switches/`, () => HttpResponse.json(list(killSwitchRows))),
+  http.get(`${api}/api/engine/v1/kill-switches/`, ({ request }) => {
+    const rows =
+      mockRole(request) === "staff"
+        ? killSwitchRows
+        : killSwitchRows.filter((item) => item.scope !== "global");
+    return HttpResponse.json(list(rows));
+  }),
   http.get(`${api}/api/engine/v1/operator/systems/`, ({ request }) => {
     const denied = operatorError(request);
     return denied ?? HttpResponse.json(list(operatorSystems));
@@ -1096,7 +1132,22 @@ export const handlers = [
   }),
   http.get(`${api}/api/engine/v1/audit-log/`, ({ request }) => {
     const denied = operatorError(request);
-    return denied ?? HttpResponse.json(list(auditRows));
+    if (denied) return denied;
+    const search = new URL(request.url).searchParams;
+    const actor = search.get("actor")?.toLowerCase() ?? "";
+    const action = search.get("action")?.toLowerCase() ?? "";
+    const target = search.get("target")?.toLowerCase() ?? "";
+    const rows = auditRows.filter((row) => {
+      const rowTarget = `${row.target_type}:${row.target_id}`.toLowerCase();
+      return (
+        (!actor ||
+          row.actor?.email.toLowerCase().includes(actor) ||
+          String(row.actor?.id) === actor) &&
+        (!action || row.action.toLowerCase().includes(action)) &&
+        (!target || rowTarget.includes(target))
+      );
+    });
+    return HttpResponse.json(list(rows));
   }),
   http.get(`${api}/api/engine/v1/health/`, ({ request }) => {
     const denied = operatorError(request);
@@ -1295,6 +1346,8 @@ export const handlers = [
     return HttpResponse.json(row);
   }),
   http.post(`${api}/api/engine/v1/kill-switches/global/`, async ({ request }) => {
+    const denied = operatorError(request);
+    if (denied) return denied;
     const body = (await request.json()) as { active: boolean; reason: string };
     let row = killSwitchRows.find((item) => item.scope === "global");
     if (!row) {
@@ -1342,15 +1395,33 @@ export const handlers = [
   http.post(`${api}/api/engine/v1/backtests/:id/cancel/`, () =>
     HttpResponse.json({ id: 1, status: "cancelled" }, { status: 202 }),
   ),
-  http.post(`${api}/api/engine/v1/operator/strategies/:family/:name/versions/`, ({ request }) => {
-    const denied = operatorError(request);
-    return denied ?? HttpResponse.json(operatorVersionResponse);
-  }),
+  http.post(
+    `${api}/api/engine/v1/operator/strategies/:family/:name/versions/`,
+    async ({ request, params }) => {
+      const denied = operatorError(request);
+      if (denied) return denied;
+      const body = (await request.json()) as { version?: string };
+      const key = `${params.family}/${params.name}`;
+      const strategy = operatorStrategies.find((item) => item.key === key);
+      const version = strategy?.versions.find((item) => item.version === body.version);
+      if (!strategy || !version) return error("not_found", "Not found.", 404);
+      version.status = "published";
+      version.published_at = "2026-10-22T10:00:00Z";
+      return HttpResponse.json({ ...operatorVersionResponse, key, version: version.version });
+    },
+  ),
   http.post(
     `${api}/api/engine/v1/operator/strategies/:family/:name/versions/:version/unpublish/`,
-    ({ request }) => {
+    ({ request, params }) => {
       const denied = operatorError(request);
-      return denied ?? HttpResponse.json(operatorVersionResponse);
+      if (denied) return denied;
+      const key = `${params.family}/${params.name}`;
+      const strategy = operatorStrategies.find((item) => item.key === key);
+      const version = strategy?.versions.find((item) => item.version === params.version);
+      if (!strategy || !version) return error("not_found", "Not found.", 404);
+      version.status = "unpublished";
+      version.unpublished_at = "2026-10-22T10:00:00Z";
+      return HttpResponse.json({ ...operatorVersionResponse, key, version: version.version });
     },
   ),
   http.all(`${api}/api/engine/v1/*`, () => error("not_found", "Mock endpoint not found", 404)),

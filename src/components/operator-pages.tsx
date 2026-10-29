@@ -2,11 +2,28 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { AlertTriangle } from "lucide-react";
+import { toast } from "react-toastify";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -19,9 +36,21 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ModeBadge } from "@/components/mode-badge";
+import { KillSwitchDialog } from "@/components/controls/kill-switch-dialog";
 import { ApiError } from "@/lib/api/client";
-import { useMe, useOperatorSystemsInfinite, useStrategies } from "@/lib/api/queries";
-import type { OperatorSystem } from "@/lib/api/types";
+import { usePublishVersion, useUnpublishVersion } from "@/lib/api/mutations";
+import {
+  useAuditLogInfinite,
+  useBacktestsInfinite,
+  useHealth,
+  useKillSwitches,
+  useMe,
+  useOperatorStrategies,
+  useOperatorSystemsInfinite,
+  useStrategies,
+} from "@/lib/api/queries";
+import { auditTarget, compactJson, isStaleHeartbeat } from "@/lib/operator";
+import type { AuditLogRow, OperatorStrategy, OperatorSystem } from "@/lib/api/types";
 
 const TAB_VALUES = ["systems", "strategies", "kill-switch", "audit", "health"] as const;
 type TabValue = (typeof TAB_VALUES)[number];
@@ -32,6 +61,17 @@ function tabValue(value: string | null): TabValue {
 
 function errorMessage(error: unknown): string {
   return error instanceof ApiError ? error.message : "Unable to load operator data.";
+}
+
+function fieldMessages(error: unknown): string[] {
+  if (!(error instanceof ApiError) || !error.fields) return [];
+  return Object.values(error.fields).flatMap((field) =>
+    Array.isArray(field)
+      ? field.filter((message): message is string => typeof message === "string")
+      : typeof field === "string"
+        ? [field]
+        : [],
+  );
 }
 
 function isForbidden(error: unknown): boolean {
@@ -58,9 +98,20 @@ export function OperatorPage() {
   const search = useSearchParams();
   const user = useMe();
   const [filters, setFilters] = useState({ state: "", mode: "", owner: "", strategy: "" });
-  const systems = useOperatorSystemsInfinite(filters, { enabled: user.data?.is_staff === true });
+  const [auditFilters, setAuditFilters] = useState({ actor: "", action: "", target: "" });
   const activeTab = tabValue(search.get("tab"));
-  const forbidden = user.data?.is_staff === false || isForbidden(systems.error);
+  const staff = user.data?.is_staff === true;
+  const systems = useOperatorSystemsInfinite(filters, {
+    enabled: staff && activeTab === "systems",
+  });
+  const strategies = useOperatorStrategies({ enabled: staff && activeTab === "strategies" });
+  const audit = useAuditLogInfinite(auditFilters, { enabled: staff && activeTab === "audit" });
+  const health = useHealth({ enabled: staff && activeTab === "health" });
+  const [mutationForbidden, setMutationForbidden] = useState(false);
+  const forbidden =
+    user.data?.is_staff === false ||
+    [systems.error, strategies.error, audit.error, health.error].some(isForbidden) ||
+    mutationForbidden;
 
   function changeTab(value: string) {
     const next = tabValue(value);
@@ -86,22 +137,33 @@ export function OperatorPage() {
           <TabsTrigger value="health">Health</TabsTrigger>
         </TabsList>
         <TabsContent value="systems" className="mt-6">
-          <OperatorSystemsTab
-            filters={filters}
-            setFilters={setFilters}
-            systems={systems}
-            ownEmail={user.data?.email ?? ""}
-          />
+          {activeTab === "systems" ? (
+            <OperatorSystemsTab
+              filters={filters}
+              setFilters={setFilters}
+              systems={systems}
+              ownEmail={user.data?.email ?? ""}
+            />
+          ) : null}
         </TabsContent>
-        {TAB_VALUES.filter((tab) => tab !== "systems").map((tab) => (
-          <TabsContent key={tab} value={tab} className="mt-6">
-            <Card>
-              <CardContent className="p-6">
-                This operator tab is coming in the next slice.
-              </CardContent>
-            </Card>
-          </TabsContent>
-        ))}
+        <TabsContent value="strategies" className="mt-6">
+          {activeTab === "strategies" ? (
+            <StrategiesTab query={strategies} onForbidden={() => setMutationForbidden(true)} />
+          ) : null}
+        </TabsContent>
+        <TabsContent value="kill-switch" className="mt-6">
+          {activeTab === "kill-switch" ? (
+            <GlobalKillSwitchTab onForbidden={() => setMutationForbidden(true)} />
+          ) : null}
+        </TabsContent>
+        <TabsContent value="audit" className="mt-6">
+          {activeTab === "audit" ? (
+            <AuditLogTab query={audit} filters={auditFilters} setFilters={setAuditFilters} />
+          ) : null}
+        </TabsContent>
+        <TabsContent value="health" className="mt-6">
+          {activeTab === "health" ? <HealthTab query={health} /> : null}
+        </TabsContent>
       </Tabs>
     </div>
   );
@@ -254,5 +316,406 @@ function OperatorSystemsTable({ rows, ownEmail }: { rows: OperatorSystem[]; ownE
         ))}
       </TableBody>
     </Table>
+  );
+}
+
+function strategyPath(key: string): [string, string] {
+  const separator = key.indexOf("/");
+  return [key.slice(0, separator), key.slice(separator + 1)];
+}
+
+function StrategiesTab({
+  query,
+  onForbidden,
+}: {
+  query: ReturnType<typeof useOperatorStrategies>;
+  onForbidden: () => void;
+}) {
+  if (query.isLoading) return <Skeleton className="h-64" />;
+  if (query.error) return <LocalError error={query.error} />;
+  return (
+    <div className="space-y-4">
+      {query.data?.results.map((strategy) => (
+        <StrategyCard key={strategy.key} strategy={strategy} onForbidden={onForbidden} />
+      ))}
+    </div>
+  );
+}
+
+function StrategyCard({
+  strategy,
+  onForbidden,
+}: {
+  strategy: OperatorStrategy;
+  onForbidden: () => void;
+}) {
+  return (
+    <Card>
+      <CardContent className="space-y-3 p-6">
+        <h2 className="font-semibold">{strategy.title}</h2>
+        {strategy.versions.map((version) => (
+          <div key={version.version} className="flex flex-wrap items-center gap-3 border-t pt-3">
+            <span>{version.version}</span>
+            <Badge variant={version.status === "published" ? "secondary" : "outline"}>
+              {version.status}
+            </Badge>
+            <span className="text-sm text-[var(--muted-foreground)]">
+              {version.code_revision || "No code revision"}
+            </span>
+            {version.status === "draft" ? (
+              <PublishDialog
+                strategy={strategy}
+                version={version.version}
+                onForbidden={onForbidden}
+              />
+            ) : null}
+            {version.status === "published" ? (
+              <UnpublishButton
+                strategy={strategy}
+                version={version.version}
+                onForbidden={onForbidden}
+              />
+            ) : null}
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PublishDialog({
+  strategy,
+  version,
+  onForbidden,
+}: {
+  strategy: OperatorStrategy;
+  version: string;
+  onForbidden: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [codeRevision, setCodeRevision] = useState(
+    strategy.versions.find((item) => item.version === version)?.code_revision ?? "",
+  );
+  const [selected, setSelected] = useState<number[]>([]);
+  const [family, name] = strategyPath(strategy.key);
+  const backtests = useBacktestsInfinite(
+    { strategy: strategy.key, version, status: "done" },
+    { enabled: open },
+  );
+  const publish = usePublishVersion(family, name);
+  const jobs = backtests.data?.pages.flatMap((page) => page.results) ?? [];
+
+  useEffect(() => {
+    if (isForbidden(publish.error) || isForbidden(backtests.error)) onForbidden();
+  }, [backtests.error, onForbidden, publish.error]);
+
+  function toggleEvidence(id: number) {
+    setSelected((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+    );
+  }
+
+  function publishVersion() {
+    publish.mutate(
+      { version, code_revision: codeRevision, evidence: selected },
+      {
+        onSuccess: () => {
+          toast.success("Strategy version published");
+          setOpen(false);
+        },
+      },
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline">
+          Publish
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <div className="space-y-4">
+          <DialogTitle>
+            Publish {strategy.title}@{version}
+          </DialogTitle>
+          <DialogDescription>Select at least one finished backtest as evidence.</DialogDescription>
+          <Input
+            aria-label="Code revision"
+            value={codeRevision}
+            onChange={(event) => setCodeRevision(event.target.value)}
+          />
+          {backtests.isLoading ? <Skeleton className="h-20" /> : null}
+          {!backtests.isLoading && jobs.length === 0 ? (
+            <p>No finished backtests of this draft yet</p>
+          ) : null}
+          {jobs.map((job) => (
+            <label key={job.id} className="flex gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={selected.includes(job.id)}
+                onChange={() => toggleEvidence(job.id)}
+              />
+              #{job.id} {job.instrument.symbol} {job.timeframe}
+            </label>
+          ))}
+          {publish.error ? (
+            <div role="alert">
+              <p>{errorMessage(publish.error)}</p>
+              {fieldMessages(publish.error).map((message) => (
+                <p key={message}>{message}</p>
+              ))}
+            </div>
+          ) : null}
+          <Button disabled={selected.length === 0 || publish.isPending} onClick={publishVersion}>
+            Publish version
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function UnpublishButton({
+  strategy,
+  version,
+  onForbidden,
+}: {
+  strategy: OperatorStrategy;
+  version: string;
+  onForbidden: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [family, name] = strategyPath(strategy.key);
+  const unpublish = useUnpublishVersion(family, name, version);
+
+  useEffect(() => {
+    if (isForbidden(unpublish.error)) onForbidden();
+  }, [onForbidden, unpublish.error]);
+
+  function unpublishVersion(event: MouseEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    unpublish.mutate(undefined, {
+      onSuccess: () => {
+        toast.success("Strategy version unpublished");
+        setOpen(false);
+      },
+    });
+  }
+
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger asChild>
+        <Button size="sm" variant="outline">
+          Unpublish
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogTitle>
+          Unpublish {strategy.title}@{version}?
+        </AlertDialogTitle>
+        <AlertDialogDescription>
+          This removes the version from the public catalog.
+        </AlertDialogDescription>
+        {unpublish.error ? (
+          <div role="alert">
+            <p>{errorMessage(unpublish.error)}</p>
+            {fieldMessages(unpublish.error).map((message) => (
+              <p key={message}>{message}</p>
+            ))}
+          </div>
+        ) : null}
+        <div className="flex justify-end gap-2">
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={unpublishVersion}>Unpublish</AlertDialogAction>
+        </div>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+function GlobalKillSwitchTab({ onForbidden }: { onForbidden: () => void }) {
+  const switches = useKillSwitches();
+  const [open, setOpen] = useState(false);
+  const global = switches.data?.results.find((item) => item.scope === "global");
+
+  useEffect(() => {
+    if (isForbidden(switches.error)) onForbidden();
+  }, [onForbidden, switches.error]);
+
+  if (switches.isLoading) return <Skeleton className="h-32" />;
+  if (switches.error) return <LocalError error={switches.error} />;
+  if (!global) return <p role="alert">Global kill switch status is unavailable.</p>;
+  return (
+    <Card>
+      <CardContent className="flex items-center justify-between gap-4 p-6">
+        <div>
+          <h2 className="font-semibold">Global kill switch</h2>
+          <p>{global.active ? "Active" : "Inactive"}</p>
+        </div>
+        <Button variant={global.active ? "outline" : "destructive"} onClick={() => setOpen(true)}>
+          {global.active ? "Deactivate" : "Activate"}
+        </Button>
+        <KillSwitchDialog
+          open={open}
+          onOpenChange={setOpen}
+          scope="global"
+          active={global.active}
+          onForbidden={onForbidden}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
+function AuditLogTab({
+  query,
+  filters,
+  setFilters,
+}: {
+  query: ReturnType<typeof useAuditLogInfinite>;
+  filters: { actor: string; action: string; target: string };
+  setFilters: (value: { actor: string; action: string; target: string }) => void;
+}) {
+  const rows = query.data?.pages.flatMap((page) => page.results) ?? [];
+  if (query.isLoading) return <Skeleton className="h-64" />;
+  if (query.error) return <LocalError error={query.error} />;
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-3">
+        {(["actor", "action", "target"] as const).map((name) => (
+          <Input
+            key={name}
+            aria-label={`${name} filter`}
+            placeholder={name}
+            value={filters[name]}
+            onChange={(event) => setFilters({ ...filters, [name]: event.target.value })}
+          />
+        ))}
+      </div>
+      <AuditTable rows={rows} />
+      {query.hasNextPage ? (
+        <Button variant="outline" onClick={() => void query.fetchNextPage()}>
+          Load more
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function AuditTable({ rows }: { rows: AuditLogRow[] }) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Time</TableHead>
+          <TableHead>Actor</TableHead>
+          <TableHead>Action</TableHead>
+          <TableHead>Target</TableHead>
+          <TableHead>Data</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((row) => (
+          <TableRow key={row.id}>
+            <TableCell>{row.time}</TableCell>
+            <TableCell>{row.actor?.email ?? "System"}</TableCell>
+            <TableCell>{row.action}</TableCell>
+            <TableCell>{auditTarget(row.target_type, row.target_id)}</TableCell>
+            <TableCell>
+              <details>
+                <summary>{compactJson(row.data).slice(0, 80)}</summary>
+                <pre>{JSON.stringify(row.data, null, 2)}</pre>
+              </details>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+function HealthTab({ query }: { query: ReturnType<typeof useHealth> }) {
+  if (query.isLoading) return <Skeleton className="h-64" />;
+  if (query.error) return <LocalError error={query.error} />;
+  const health = query.data;
+  if (!health) return null;
+  const heartbeats = [...health.heartbeats].sort(
+    (left, right) => (right.age_s ?? -1) - (left.age_s ?? -1),
+  );
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      <HealthCard
+        title="Supervisor"
+        ok={health.supervisor.alive}
+        message={health.supervisor.error}
+      />
+      <HealthCard
+        title="Redis"
+        ok={health.redis.ok}
+        message={health.redis.error}
+        detail={`${health.redis.latency_ms ?? "—"} ms`}
+      />
+      <HealthCard
+        title="Database"
+        ok={health.db.ok}
+        message={health.db.error}
+        detail={`${health.db.latency_ms ?? "—"} ms`}
+      />
+      <Card>
+        <CardContent className="p-4">
+          <h2 className="font-semibold">Workers</h2>
+          {Object.entries(health.workers).map(([state, count]) => (
+            <p key={state}>
+              {state}: {count}
+            </p>
+          ))}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent className="p-4">
+          <h2 className="font-semibold">Heartbeats</h2>
+          {heartbeats.map((item) => (
+            <p key={item.system} className={isStaleHeartbeat(item.age_s) ? "text-red-500" : ""}>
+              #{item.system} {item.state}: {item.age_s ?? "—"}s
+            </p>
+          ))}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent className="p-4">
+          <h2 className="font-semibold">Markets</h2>
+          {health.markets.map((market) => (
+            <p key={market.key}>
+              {market.key}: lag {market.lag_s ?? "—"}s, heartbeat{" "}
+              {market.heartbeat_age_s ?? "—"}s, gaps {market.gaps}
+              {market.last_error ? `, ${market.last_error}` : ""}
+            </p>
+          ))}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function HealthCard({
+  title,
+  ok,
+  message,
+  detail,
+}: {
+  title: string;
+  ok: boolean;
+  message: string | null;
+  detail?: string;
+}) {
+  return (
+    <Card className={ok ? "" : "border-red-500"}>
+      <CardContent className={ok ? "p-4" : "p-4 text-red-500"}>
+        <h2 className="font-semibold">{title}</h2>
+        <p>{ok ? "OK" : (message ?? "Unavailable")}</p>
+        {detail ? <p>{detail}</p> : null}
+      </CardContent>
+    </Card>
   );
 }
