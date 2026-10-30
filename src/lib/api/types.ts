@@ -75,6 +75,48 @@ export type AccountBalance = {
   error: string | null;
 };
 export type PaginatedList<T> = { results: T[]; next: string | null; count: number | null };
+export type ShadowReportStatus = "ok" | "data_changed" | "not_comparable" | "error";
+export type ShadowReportSummary = {
+  status: ShadowReportStatus;
+  reason?: string;
+  error?: string;
+  bars?: number;
+  bar_mismatches?: number;
+  decision_mismatches?: number;
+  pnl_live?: string;
+  pnl_shadow?: string;
+  fees_live?: string;
+  fees_shadow?: string;
+  fee_delta?: string;
+  other?: string;
+  excluded_manual_pnl?: string;
+  dataset_sha256?: string;
+  segment?: { start: string; end: string };
+  truncated_at?: string;
+};
+export type ShadowReport = {
+  id: number;
+  window_start: string;
+  window_end: string;
+  excluded_intervals: Array<{ start: string; end: string; realised_pnl: string }>;
+  summary: ShadowReportSummary;
+  diffs_count: number;
+  created_at: string;
+};
+export type ShadowDiffOrder = {
+  bar_time: string;
+  side: string;
+  exectype: string;
+  tag: string;
+  size: string;
+};
+export type ShadowDiff = {
+  bar_time: string;
+  kind: "extra" | "missing" | "size";
+  live: ShadowDiffOrder | null;
+  shadow: ShadowDiffOrder | null;
+};
+export type ShadowReportDetail = ShadowReport & { diffs: ShadowDiff[] };
 export type OperatorSystem = TradingSystem & {
   owner: { id: number; email: string };
 };

@@ -39,6 +39,8 @@ import type {
   SystemPerformance,
   SystemPosition,
   SystemTrade,
+  ShadowReport,
+  ShadowReportDetail,
   Venue,
 } from "@/lib/api/types";
 
@@ -315,6 +317,28 @@ export function useSystemPerformance(
       ),
     enabled: options.enabled ?? true,
     refetchInterval: options.poll ? poll : false,
+  });
+}
+export function useShadowReports(id: number, options: { enabled?: boolean } = {}) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.system.shadowReports(id),
+    enabled: options.enabled ?? true,
+    initialPageParam: "",
+    queryFn: ({ pageParam }) =>
+      api.get<PaginatedList<ShadowReport>>(
+        `/api/engine/v1/systems/${id}/shadow-reports/${queryString({ cursor: String(pageParam) })}`,
+      ),
+    getNextPageParam: (page) =>
+      page.next ? (new URL(page.next).searchParams.get("cursor") ?? undefined) : undefined,
+  });
+}
+export function useShadowReport(id: number, reportId: number | null) {
+  return useQuery({
+    queryKey: queryKeys.system.shadowReport(id, reportId ?? 0),
+    enabled: reportId !== null,
+    retry: false,
+    queryFn: () =>
+      api.get<ShadowReportDetail>(`/api/engine/v1/systems/${id}/shadow-reports/${reportId}/`),
   });
 }
 export function useStrategies() {

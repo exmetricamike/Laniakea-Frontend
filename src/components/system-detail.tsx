@@ -14,6 +14,7 @@ import { type FormWithParams, SchemaForm } from "@/components/params/schema-form
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -40,9 +41,12 @@ import {
   useSystemPerformance,
   useSystemPosition,
   useSystemTrades,
+  useShadowReport,
+  useShadowReports,
 } from "@/lib/api/queries";
 import { useUpdateSystem } from "@/lib/api/mutations";
-import type { BacktestMetric, SystemOrder, TradingSystem } from "@/lib/api/types";
+import { shadowAttributionRows, shadowStatusLabel } from "@/lib/shadow-report";
+import type { BacktestMetric, ShadowDiffOrder, SystemOrder, TradingSystem } from "@/lib/api/types";
 
 type Tab =
   "open" | "history" | "trades" | "fills" | "performance" | "events" | "commands" | "settings";
@@ -622,7 +626,12 @@ function PerformanceTab({
 }) {
   const [period, setPeriod] = useState("all");
   const [from, setFrom] = useState<string | undefined>(undefined);
+  const [reportId, setReportId] = useState<number | null>(null);
   const performance = useSystemPerformance(id, from, { enabled: active, poll: running && active });
+  const reports = useShadowReports(id, { enabled: active });
+  const report = useShadowReport(id, reportId);
+  const shadowReports = reports.data?.pages.flatMap((page) => page.results) ?? [];
+  const selectedReport = shadowReports.find((item) => item.id === reportId);
   if (!active) return <TabsContent value="performance" />;
   return (
     <TabsContent value="performance">
@@ -668,7 +677,188 @@ function PerformanceTab({
           )}
         </>
       ) : null}
+      <section className="mt-6" aria-labelledby="shadow-reconciliation-heading">
+        <h2 id="shadow-reconciliation-heading" className="text-lg font-semibold">
+          Shadow reconciliation
+        </h2>
+        {reports.isLoading ? <p>Loading…</p> : null}
+        {reports.error ? <p role="alert">{errorText(reports.error)}</p> : null}
+        {reports.data && shadowReports.length === 0 ? (
+          <p>No shadow reports yet. They are produced by the nightly shadow job.</p>
+        ) : null}
+        {shadowReports.length ? (
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Window</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Decision mismatches</TableHead>
+                  <TableHead>PnL live</TableHead>
+                  <TableHead>PnL shadow</TableHead>
+                  <TableHead>Excluded manual PnL</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {shadowReports.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell>
+                      {localTime(item.window_start)} – {localTime(item.window_end)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge>{shadowStatusLabel(item.summary)}</Badge>
+                    </TableCell>
+                    <TableCell>{item.summary.decision_mismatches ?? "—"}</TableCell>
+                    <TableCell>{money(item.summary.pnl_live)}</TableCell>
+                    <TableCell>{money(item.summary.pnl_shadow)}</TableCell>
+                    <TableCell>{money(item.summary.excluded_manual_pnl)}</TableCell>
+                    <TableCell>
+                      <Button variant="outline" size="sm" onClick={() => setReportId(item.id)}>
+                        Details
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {reports.hasNextPage ? (
+              <Button
+                variant="outline"
+                disabled={reports.isFetchingNextPage}
+                onClick={() => void reports.fetchNextPage()}
+              >
+                Load more
+              </Button>
+            ) : null}
+          </>
+        ) : null}
+      </section>
+      <ShadowReportDialog
+        reportId={reportId}
+        report={report.data}
+        window={
+          selectedReport
+            ? `${localTime(selectedReport.window_start)} – ${localTime(selectedReport.window_end)}`
+            : undefined
+        }
+        loading={report.isLoading}
+        error={report.error}
+        onOpenChange={(open) => !open && setReportId(null)}
+      />
     </TabsContent>
+  );
+}
+
+function orderDescription(order: ShadowDiffOrder | null): string {
+  return order ? `${order.side} ${order.exectype} ${size(order.size)} ${order.tag}` : "—";
+}
+
+function ShadowReportDialog({
+  reportId,
+  report,
+  window,
+  loading,
+  error,
+  onOpenChange,
+}: {
+  reportId: number | null;
+  report: import("@/lib/api/types").ShadowReportDetail | undefined;
+  window: string | undefined;
+  loading: boolean;
+  error: Error | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const detailWindow = report
+    ? `${localTime(report.window_start)} – ${localTime(report.window_end)}`
+    : (window ?? "");
+  return (
+    <Dialog open={reportId !== null} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogTitle>Shadow report {detailWindow}</DialogTitle>
+        <div className="max-h-[70vh] overflow-y-auto">
+          {loading ? <p>Loading…</p> : null}
+          {error ? <p role="alert">{errorText(error)}</p> : null}
+          {report ? (
+            <>
+              <h3 className="mt-4 font-semibold">Attribution</h3>
+              <Table>
+                <TableBody>
+                  {shadowAttributionRows(report.summary).map(([label, value]) => (
+                    <TableRow key={label}>
+                      <TableCell>{label}</TableCell>
+                      <TableCell>{money(value)}</TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow>
+                    <TableCell>Bars</TableCell>
+                    <TableCell>{report.summary.bars ?? "—"}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Bar mismatches</TableCell>
+                    <TableCell>{report.summary.bar_mismatches ?? "—"}</TableCell>
+                  </TableRow>
+                  {report.summary.truncated_at ? (
+                    <TableRow>
+                      <TableCell>Truncated at</TableCell>
+                      <TableCell>{localTime(report.summary.truncated_at)}</TableCell>
+                    </TableRow>
+                  ) : null}
+                </TableBody>
+              </Table>
+              <h3 className="mt-4 font-semibold">Excluded intervals</h3>
+              {report.excluded_intervals.length ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Start</TableHead>
+                      <TableHead>End</TableHead>
+                      <TableHead>Realised PnL</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {report.excluded_intervals.map((interval) => (
+                      <TableRow key={interval.start}>
+                        <TableCell>{localTime(interval.start)}</TableCell>
+                        <TableCell>{localTime(interval.end)}</TableCell>
+                        <TableCell>{money(interval.realised_pnl)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <p>None.</p>
+              )}
+              <h3 className="mt-4 font-semibold">Decision differences</h3>
+              {report.diffs.length ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Bar time</TableHead>
+                      <TableHead>Kind</TableHead>
+                      <TableHead>Live</TableHead>
+                      <TableHead>Shadow</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {report.diffs.map((diff, index) => (
+                      <TableRow key={`${diff.bar_time}-${index}`}>
+                        <TableCell>{localTime(diff.bar_time)}</TableCell>
+                        <TableCell>{diff.kind}</TableCell>
+                        <TableCell>{orderDescription(diff.live)}</TableCell>
+                        <TableCell>{orderDescription(diff.shadow)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <p>No decision differences.</p>
+              )}
+            </>
+          ) : null}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

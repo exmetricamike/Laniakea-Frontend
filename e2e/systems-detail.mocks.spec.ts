@@ -44,6 +44,23 @@ test("renders system detail tabs and a not-found page", async ({ page }) => {
     await expect(panel).toContainText(value);
     await expect(panel.getByRole("alert")).toHaveCount(0);
   }
+  await page.getByRole("tab", { name: "Performance" }).click();
+  const performance = page.getByRole("tabpanel");
+  await expect(performance.getByText("Shadow reconciliation")).toBeVisible();
+  await expect(performance.getByText("ok", { exact: true })).toBeVisible();
+  await expect(performance.getByText("not comparable: restarted", { exact: true })).toBeVisible();
+  await performance.getByRole("button", { name: "Details" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("Attribution")).toBeVisible();
+  await expect(dialog.getByText("PnL live", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("extra", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("buy market 0.01 entry", { exact: true })).toBeVisible();
+  await page.getByLabel("Close dialog").click();
+  await page.goto("/systems/43");
+  await page.getByRole("tab", { name: "Performance" }).click();
+  await expect(
+    page.getByText("No shadow reports yet. They are produced by the nightly shadow job."),
+  ).toBeVisible();
   await page.goto("/systems/999999");
   await expect(page.getByRole("heading", { name: "System not found" })).toBeVisible();
 });

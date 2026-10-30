@@ -966,6 +966,121 @@ export const handlers = [
       backtest_evidence: [{ backtest_id: 1, label: "Published ATR backtest" }],
     }),
   ),
+  http.get(`${api}/api/engine/v1/systems/:id/shadow-reports/`, ({ params }) => {
+    if (Number(params.id) === 43) return HttpResponse.json(list([]));
+    if (Number(params.id) !== 42) return error("not_found", "Not found.", 404);
+    return HttpResponse.json(
+      list([
+        {
+          id: 701,
+          window_start: "2026-10-21T00:00:00Z",
+          window_end: "2026-10-22T00:00:00Z",
+          excluded_intervals: [
+            { start: "2026-10-21T12:00:00Z", end: "2026-10-21T12:15:00Z", realised_pnl: "1.25" },
+          ],
+          summary: {
+            status: "ok",
+            bars: 24,
+            bar_mismatches: 0,
+            decision_mismatches: 2,
+            pnl_live: "12.30",
+            pnl_shadow: "11.80",
+            fees_live: "0.50",
+            fees_shadow: "0.45",
+            fee_delta: "0.05",
+            other: "0",
+            excluded_manual_pnl: "1.25",
+            dataset_sha256: "demo",
+            segment: { start: "2026-10-21T00:00:00Z", end: "2026-10-22T00:00:00Z" },
+          },
+          diffs_count: 2,
+          created_at: "2026-10-22T01:00:00Z",
+        },
+        {
+          id: 700,
+          window_start: "2026-10-20T00:00:00Z",
+          window_end: "2026-10-21T00:00:00Z",
+          excluded_intervals: [],
+          summary: { status: "not_comparable", reason: "restarted" },
+          diffs_count: 0,
+          created_at: "2026-10-21T01:00:00Z",
+        },
+      ]),
+    );
+  }),
+  http.get(`${api}/api/engine/v1/systems/:id/shadow-reports/:reportId/`, ({ params }) => {
+    if (Number(params.id) !== 42) return error("not_found", "Not found.", 404);
+    if (Number(params.reportId) === 700) {
+      return HttpResponse.json({
+        id: 700,
+        window_start: "2026-10-20T00:00:00Z",
+        window_end: "2026-10-21T00:00:00Z",
+        excluded_intervals: [],
+        summary: { status: "not_comparable", reason: "restarted" },
+        diffs_count: 0,
+        created_at: "2026-10-21T01:00:00Z",
+        diffs: [],
+      });
+    }
+    if (Number(params.reportId) !== 701) return error("not_found", "Not found.", 404);
+    return HttpResponse.json({
+      id: 701,
+      window_start: "2026-10-21T00:00:00Z",
+      window_end: "2026-10-22T00:00:00Z",
+      excluded_intervals: [
+        { start: "2026-10-21T12:00:00Z", end: "2026-10-21T12:15:00Z", realised_pnl: "1.25" },
+      ],
+      summary: {
+        status: "ok",
+        bars: 24,
+        bar_mismatches: 0,
+        decision_mismatches: 2,
+        pnl_live: "12.30",
+        pnl_shadow: "11.80",
+        fees_live: "0.50",
+        fees_shadow: "0.45",
+        fee_delta: "0.05",
+        other: "0",
+        excluded_manual_pnl: "1.25",
+        dataset_sha256: "demo",
+        segment: { start: "2026-10-21T00:00:00Z", end: "2026-10-22T00:00:00Z" },
+      },
+      diffs_count: 2,
+      created_at: "2026-10-22T01:00:00Z",
+      diffs: [
+        {
+          bar_time: "2026-10-21T05:00:00Z",
+          kind: "extra",
+          live: {
+            bar_time: "2026-10-21T05:00:00Z",
+            side: "buy",
+            exectype: "market",
+            size: "0.01",
+            tag: "entry",
+          },
+          shadow: null,
+        },
+        {
+          bar_time: "2026-10-21T06:00:00Z",
+          kind: "size",
+          live: {
+            bar_time: "2026-10-21T06:00:00Z",
+            side: "sell",
+            exectype: "limit",
+            size: "0.02",
+            tag: "exit",
+          },
+          shadow: {
+            bar_time: "2026-10-21T06:00:00Z",
+            side: "sell",
+            exectype: "limit",
+            size: "0.01",
+            tag: "exit",
+          },
+        },
+      ],
+    });
+  }),
   http.get(`${api}/api/engine/v1/systems/:id/equity/`, () =>
     HttpResponse.json({
       interval: "1h",

@@ -724,6 +724,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/engine/v1/systems/{system_id}/shadow-reports/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["engine_system_shadow_reports"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/engine/v1/systems/{system_id}/shadow-reports/{report_id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["engine_system_shadow_report"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/engine/v1/systems/{system_id}/start/": {
         parameters: {
             query?: never;
@@ -1167,6 +1199,31 @@ export interface components {
             price?: string;
             /** Format: decimal */
             stop_price?: string;
+        };
+        ShadowReportDetail: {
+            readonly id: number;
+            /** Format: date-time */
+            window_start: string;
+            /** Format: date-time */
+            window_end: string;
+            excluded_intervals?: unknown;
+            summary?: unknown;
+            readonly diffs_count: string;
+            /** Format: date-time */
+            readonly created_at: string;
+            diffs?: unknown;
+        };
+        ShadowReportList: {
+            readonly id: number;
+            /** Format: date-time */
+            window_start: string;
+            /** Format: date-time */
+            window_end: string;
+            excluded_intervals?: unknown;
+            summary?: unknown;
+            readonly diffs_count: string;
+            /** Format: date-time */
+            readonly created_at: string;
         };
         /**
          * @description * `buy` - buy
@@ -2520,6 +2577,49 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    engine_system_shadow_reports: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                system_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShadowReportList"];
+                };
+            };
+        };
+    };
+    engine_system_shadow_report: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: number;
+                system_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShadowReportDetail"];
                 };
             };
         };

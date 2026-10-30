@@ -16,6 +16,9 @@ export const queryKeys = {
     fills: (id: number, filters: object) => ["system", id, "fills", filters] as const,
     position: (id: number) => ["system", id, "position"] as const,
     performance: (id: number, range: string) => ["system", id, "performance", range] as const,
+    shadowReports: (id: number) => ["system", id, "shadow-reports"] as const,
+    shadowReport: (id: number, reportId: number) =>
+      ["system", id, "shadow-reports", reportId] as const,
     events: (id: number, filters?: object) =>
       filters ? (["system", id, "events", filters] as const) : (["system", id, "events"] as const),
     commands: (id: number, filters?: object) =>
