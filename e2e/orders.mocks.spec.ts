@@ -72,6 +72,15 @@ test("closes a position and shows flat after completion", async ({ page }) => {
   await expect(page.getByText("Flat")).toBeVisible();
 });
 
+test("formats close-position quantities and estimates", async ({ page }) => {
+  await page.goto("/systems/42");
+  await page.getByRole("button", { name: "Close position" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("0.01234");
+  await expect(dialog).toContainText("0.25 USDT");
+  await expect(dialog).not.toContainText(/\d\.\d{9,}/);
+});
+
 test("saves only changed settings and shows parameter errors", async ({ page }) => {
   await page.goto("/systems/44");
   await page.getByRole("tab", { name: "Settings" }).click();

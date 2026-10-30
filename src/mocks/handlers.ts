@@ -71,16 +71,17 @@ const commandTimers = new Set<ReturnType<typeof setTimeout>>();
 const socketSubscriptions = new Map<string, Set<string>>();
 const socketSequences = new Map<string, number>();
 let socketBlocked = false;
-let positionRow = {
-  size: "0.031",
+const initialPositionRow = {
+  size: "0.012337696973",
   side: "long" as "long" | "short" | null,
   avg_price: "64100",
   mark_price: "64945",
   marked_at: "2026-10-22T10:00:00Z",
-  unrealised_pnl: "12.30",
-  venue_size: "0.031",
+  unrealised_pnl: "0.253663049769",
+  venue_size: "0.012337696973",
   reconciled_at: "2026-10-22T10:00:00Z",
 };
+let positionRow = structuredClone(initialPositionRow);
 type MockKillSwitch = {
   scope: "tenant" | "account" | "global";
   target: number | null;
@@ -535,6 +536,7 @@ export function resetAccountMocks(): void {
   backtestTimers.forEach((timer) => clearTimeout(timer));
   backtestTimers.clear();
   systemRows = structuredClone(systems);
+  positionRow = structuredClone(initialPositionRow);
   orderRows = structuredClone(initialOrderRows);
   commandRows = [];
   commandPolls.clear();

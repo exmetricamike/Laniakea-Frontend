@@ -20,6 +20,7 @@ import {
   useSystemPosition,
 } from "@/lib/api/queries";
 import { COMMAND_REASON_LABELS, estimateOrder, validManualOrder } from "@/lib/order-controls";
+import { formatMoney, formatQuantity } from "@/lib/format";
 import type { ManualOrder, SystemCommand, SystemOrder, TradingSystem } from "@/lib/api/types";
 
 type Props = { id: number; open: boolean; onOpenChange: (open: boolean) => void };
@@ -110,33 +111,47 @@ function CommandProgress({
 }
 
 export function CancelOrderDialog({ order, ...props }: Props & { order: SystemOrder }) {
-  const mutation = useCancelOrder(props.id, order.id);
-  const [command, setCommand] = useState<SystemCommand | null>(null);
   return (
     <ActiveDialog {...props}>
-      {(system) => (
-        <div className="space-y-4">
-          <Heading action="Cancel order" system={system} />
-          <p>
-            Cancel {order.type} {order.side} order #{order.id}?
-          </p>
-          <CommandProgress
-            command={command}
-            systemId={props.id}
-            onDone={() => props.onOpenChange(false)}
-          />
-          {!command || mutation.isError ? (
-            <Button
-              disabled={mutation.isPending}
-              onClick={() => mutation.mutate(undefined, { onSuccess: setCommand })}
-            >
-              Cancel order
-            </Button>
-          ) : null}
-          {mutation.error ? <p role="alert">{message(mutation.error)}</p> : null}
-        </div>
-      )}
+      {(system) => <CancelBody system={system} order={order} {...props} />}
     </ActiveDialog>
+  );
+}
+
+function CancelBody({
+  system,
+  order,
+  ...props
+}: Props & { system: TradingSystem; order: SystemOrder }) {
+  const mutation = useCancelOrder(props.id, order.id);
+  const instrument = useInstrument(system.instrument.id, { enabled: props.open });
+  const [command, setCommand] = useState<SystemCommand | null>(null);
+  const lotSize = instrument.data?.lot_size ?? null;
+  const tickSize = instrument.data?.tick_size ?? null;
+  return (
+    <div className="space-y-4">
+      <Heading action="Cancel order" system={system} />
+      <p>
+        Cancel {order.type} {order.side} order #{order.id}?
+      </p>
+      <p>
+        {order.side} {formatQuantity(order.size, lotSize)} @ {formatQuantity(order.price, tickSize)}
+      </p>
+      <CommandProgress
+        command={command}
+        systemId={props.id}
+        onDone={() => props.onOpenChange(false)}
+      />
+      {!command || mutation.isError ? (
+        <Button
+          disabled={mutation.isPending}
+          onClick={() => mutation.mutate(undefined, { onSuccess: setCommand })}
+        >
+          Cancel order
+        </Button>
+      ) : null}
+      {mutation.error ? <p role="alert">{message(mutation.error)}</p> : null}
+    </div>
   );
 }
 
@@ -154,7 +169,7 @@ function ModifyBody({
   ...props
 }: Props & { system: TradingSystem; order: SystemOrder }) {
   const mutation = useModifyOrder(props.id, order.id);
-  const instrument = useInstrument(system.instrument.id);
+  const instrument = useInstrument(system.instrument.id, { enabled: props.open });
   const [command, setCommand] = useState<SystemCommand | null>(null);
   const [size, setSize] = useState(order.size);
   const [price, setPrice] = useState(order.price ?? "");
@@ -165,21 +180,22 @@ function ModifyBody({
   const needsStop = order.type === "stop" || order.type === "stop_limit";
   const increase = isGreater(size, order.size);
   const confirmed = system.mode !== "live" || !increase || liveNameMatches(system.name, typed);
+  const lotSize = instrument.data?.lot_size ?? null;
+  const tickSize = instrument.data?.tick_size ?? null;
   return (
     <div className="space-y-4">
       <Heading action="Modify order" system={system} />
       <p className="text-sm text-yellow-400">Will cancel and replace; queue priority is lost</p>
-      <Field label="Size" value={size} onChange={setSize} hint={instrument.data?.lot_size} />
+      <p>
+        Current: {order.side} {formatQuantity(order.size, lotSize)} (filled{" "}
+        {formatQuantity(order.filled_size, lotSize)}) @ {formatQuantity(order.price, tickSize)}
+      </p>
+      <Field label="Size" value={size} onChange={setSize} hint={lotSize} />
       {needsPrice ? (
-        <Field label="Price" value={price} onChange={setPrice} hint={instrument.data?.tick_size} />
+        <Field label="Price" value={price} onChange={setPrice} hint={tickSize} />
       ) : null}
       {needsStop ? (
-        <Field
-          label="Stop price"
-          value={stopPrice}
-          onChange={setStopPrice}
-          hint={instrument.data?.tick_size}
-        />
+        <Field label="Stop price" value={stopPrice} onChange={setStopPrice} hint={tickSize} />
       ) : null}
       {system.mode === "live" && increase ? (
         <LiveConfirm name={system.name} value={typed} onChange={setTyped} />
@@ -238,7 +254,11 @@ function Field({
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
-      {hint ? <p className="text-xs text-[var(--muted-foreground)]">Increment: {hint}</p> : null}
+      {hint ? (
+        <p className="text-xs text-[var(--muted-foreground)]">
+          Increment: {formatQuantity(hint, hint)}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -254,6 +274,7 @@ export function NewOrderDialog(props: Props) {
 function NewOrderBody({ system, ...props }: Props & { system: TradingSystem }) {
   const mutation = useNewOrder(props.id);
   const position = useSystemPosition(props.id, { enabled: props.open });
+  const instrument = useInstrument(system.instrument.id, { enabled: props.open });
   const switches = useKillSwitches();
   const [command, setCommand] = useState<SystemCommand | null>(null);
   const [side, setSide] = useState<"buy" | "sell">("buy");
@@ -281,6 +302,9 @@ function NewOrderBody({ system, ...props }: Props & { system: TradingSystem }) {
     reduce_only: activeSwitch || reduceOnly,
   };
   const estimate = estimateOrder(order, position.data?.mark_price, system.cost_model.fee_rate);
+  const lotSize = instrument.data?.lot_size ?? null;
+  const tickSize = instrument.data?.tick_size ?? null;
+  const currency = instrument.data?.settle ?? system.settle;
   const confirmed =
     system.mode !== "live" || order.reduce_only || liveNameMatches(system.name, typed);
   return (
@@ -332,12 +356,13 @@ function NewOrderBody({ system, ...props }: Props & { system: TradingSystem }) {
         label={amountKind === "size" ? "Size" : "Notional"}
         value={amount}
         onChange={setAmount}
+        hint={amountKind === "size" ? lotSize : null}
       />
       {type === "limit" || type === "stop_limit" ? (
-        <Field label="Price" value={price} onChange={setPrice} />
+        <Field label="Price" value={price} onChange={setPrice} hint={tickSize} />
       ) : null}
       {type === "stop" || type === "stop_limit" ? (
-        <Field label="Stop price" value={stopPrice} onChange={setStopPrice} />
+        <Field label="Stop price" value={stopPrice} onChange={setStopPrice} hint={tickSize} />
       ) : null}
       <label>
         <input
@@ -348,9 +373,8 @@ function NewOrderBody({ system, ...props }: Props & { system: TradingSystem }) {
         />{" "}
         Reduce only
       </label>
-      <p>
-        Estimate notional: {estimate?.notional ?? "—"} · Fee: {estimate?.fee ?? "—"}
-      </p>
+      <p>Estimated notional: {formatMoney(estimate?.notional ?? null, currency)}</p>
+      <p>Estimated fee: {formatMoney(estimate?.fee ?? null, currency)}</p>
       {system.mode === "live" && !order.reduce_only ? (
         <LiveConfirm name={system.name} value={typed} onChange={setTyped} />
       ) : null}
@@ -443,17 +467,22 @@ export function OrderRowActions({ systemId, order }: { systemId: number; order: 
 function CloseBody({ system, ...props }: Props & { system: TradingSystem }) {
   const mutation = useClosePosition(props.id);
   const position = useSystemPosition(props.id, { enabled: props.open });
+  const instrument = useInstrument(system.instrument.id, { enabled: props.open });
   const [command, setCommand] = useState<SystemCommand | null>(null);
   const [typed, setTyped] = useState("");
   const row = position.data;
+  const lotSize = instrument.data?.lot_size ?? null;
+  const tickSize = instrument.data?.tick_size ?? null;
+  const currency = instrument.data?.settle ?? system.settle;
   const confirmed = system.mode !== "live" || liveNameMatches(system.name, typed);
   return (
     <div className="space-y-4">
       <Heading action="Close position" system={system} />
       <p>
-        {row?.side === "long" ? "Sell" : "Buy"} {row?.size ?? "—"} at {row?.mark_price ?? "—"}
+        {row?.side === "long" ? "Sell" : "Buy"} {formatQuantity(row?.size ?? null, lotSize)} at{" "}
+        {formatQuantity(row?.mark_price ?? null, tickSize)}
       </p>
-      <p>Estimated PnL: {row?.unrealised_pnl ?? "—"}</p>
+      <p>Estimated PnL: {formatMoney(row?.unrealised_pnl ?? null, currency)}</p>
       {system.mode === "live" ? (
         <LiveConfirm name={system.name} value={typed} onChange={setTyped} />
       ) : null}
