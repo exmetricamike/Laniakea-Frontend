@@ -8,7 +8,7 @@ const variants = cva(
       variant: {
         default: "bg-[var(--primary)] text-[var(--primary-foreground)]",
         secondary: "bg-[var(--muted)]",
-        destructive: "border-transparent bg-[var(--destructive)] text-white",
+        destructive: "border-transparent bg-[var(--destructive)] text-black",
         outline: "bg-transparent",
       },
     },

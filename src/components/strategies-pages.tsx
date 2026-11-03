@@ -6,6 +6,7 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ApiError } from "@/lib/api/client";
+import { apiErrorMessage } from "@/lib/api/errors";
 import {
   useStrategies,
   useStrategy,
@@ -29,7 +30,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 function errorMessage(error: unknown): string {
-  return error instanceof ApiError ? error.message : "Unable to load strategies.";
+  return apiErrorMessage(error, "Unable to load strategies.");
 }
 
 function QueryError({ error, retry }: { error: unknown; retry: () => void }) {

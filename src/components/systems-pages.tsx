@@ -31,6 +31,7 @@ import {
 import { ModeBadge } from "@/components/mode-badge";
 import { SystemActions } from "@/components/controls/system-actions";
 import { ApiError } from "@/lib/api/client";
+import { apiErrorMessage } from "@/lib/api/errors";
 import { useCreateSystem } from "@/lib/api/mutations";
 import {
   useAccounts,
@@ -68,7 +69,7 @@ export type WizardValues = {
 };
 
 function message(error: unknown): string {
-  return error instanceof ApiError ? error.message : "Unable to complete the request.";
+  return apiErrorMessage(error);
 }
 
 function stateBadge(state: TradingSystem["state"]) {
@@ -168,7 +169,14 @@ export function SystemsPage() {
         </select>
       </div>
       {systems.isLoading ? <Skeleton className="h-64" /> : null}
-      {systems.error ? <p role="alert">{message(systems.error)}</p> : null}
+      {systems.error ? (
+        <div role="alert" className="space-y-3 rounded-md border border-red-500/40 p-4">
+          <p>{message(systems.error)}</p>
+          <Button variant="outline" onClick={() => void systems.refetch()}>
+            Retry
+          </Button>
+        </div>
+      ) : null}
       {!systems.isLoading && rows.length === 0 ? (
         <Card>
           <CardContent className="p-6">No systems yet.</CardContent>

@@ -219,7 +219,11 @@ function TopBar({ user }: { user: User | null }) {
           </span>
         </Hint>
         <Hint text={liveLabel}>
-          <span aria-label={liveLabel} className="inline-flex size-7 items-center justify-center">
+          <span
+            aria-label={liveLabel}
+            role="status"
+            className="inline-flex size-7 items-center justify-center"
+          >
             <span className={`size-2 rounded-full ${dotColor}`} />
           </span>
         </Hint>

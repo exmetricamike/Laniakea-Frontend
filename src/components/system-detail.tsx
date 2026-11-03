@@ -26,6 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ApiError } from "@/lib/api/client";
+import { apiErrorMessage } from "@/lib/api/errors";
 import { useLiveChannel } from "@/lib/ws/socket";
 import {
   useAccount,
@@ -96,7 +97,7 @@ function periodMs(timeframe: string): number | undefined {
 }
 
 function errorText(error: unknown): string {
-  return error instanceof ApiError ? error.message : "Unable to load system data.";
+  return apiErrorMessage(error, "Unable to load system data.");
 }
 
 function AccountLabel({ id }: { id: number }) {

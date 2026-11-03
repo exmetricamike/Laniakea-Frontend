@@ -107,6 +107,18 @@ let nextAccountId = Math.max(20, ...accounts.map((item) => item.id + 1));
 const verificationPolls = new Map<number, number>();
 const balancePolls = new Map<number, number>();
 let failNextVersionDetail = false;
+// Kept in localStorage so a failure survives the full page load a test uses to reach a section.
+const failedPathsKey = "laniakea.mocks.failPaths";
+const failedPaths = new Set<string>(
+  typeof localStorage === "undefined"
+    ? []
+    : (JSON.parse(localStorage.getItem(failedPathsKey) ?? "[]") as string[]),
+);
+function saveFailedPaths(): void {
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem(failedPathsKey, JSON.stringify([...failedPaths]));
+  }
+}
 let failNextStart = false;
 let blockNextStart = false;
 let failNextOperatorPublishConflict = false;
@@ -509,6 +521,12 @@ function queuedBacktest(id: number): Record<string, unknown> {
 function error(code: string, message: string, status: number) {
   return HttpResponse.json({ error: { code, message, fields: {}, reasons: [] } }, { status });
 }
+function routeFailure(request: Request): Response | null {
+  const path = new URL(request.url).pathname;
+  return [...failedPaths].some((failedPath) => path.startsWith(failedPath))
+    ? error("server_error", "Temporary failure.", 500)
+    : null;
+}
 function mockRole(request: Request): "staff" | "tenant" {
   return request.headers.get("authorization")?.startsWith("Bearer mock:staff:")
     ? "staff"
@@ -529,6 +547,8 @@ export function resetAccountMocks(): void {
   verificationPolls.clear();
   balancePolls.clear();
   failNextVersionDetail = false;
+  failedPaths.clear();
+  saveFailedPaths();
   failNextStart = false;
   blockNextStart = false;
   failNextOperatorPublishConflict = false;
@@ -631,6 +651,21 @@ export const handlers = [
       headers: { "Access-Control-Allow-Origin": "*" },
     });
   }),
+  http.post(`${api}/__mocks/fail-path`, async ({ request }) => {
+    const body = (await request.json()) as { path?: unknown };
+    if (typeof body.path !== "string" || !body.path.startsWith("/api/engine/v1/")) {
+      return error("validation_error", "A valid engine path is required.", 400);
+    }
+    failedPaths.add(body.path);
+    saveFailedPaths();
+    return new HttpResponse(null, { status: 204, headers: corsHeaders });
+  }),
+  http.delete(`${api}/__mocks/fail-path`, async ({ request }) => {
+    const body = (await request.json()) as { path?: unknown };
+    if (typeof body.path === "string") failedPaths.delete(body.path);
+    saveFailedPaths();
+    return new HttpResponse(null, { status: 204, headers: corsHeaders });
+  }),
   http.post(`${api}/__mocks/fail-next/system-start`, () => {
     failNextStart = true;
     return new HttpResponse(null, {
@@ -701,7 +736,9 @@ export const handlers = [
       volume: ["1"],
     }),
   ),
-  http.get(`${api}/api/engine/v1/strategies/`, () => HttpResponse.json(list(strategies))),
+  http.get(`${api}/api/engine/v1/strategies/`, ({ request }) => {
+    return routeFailure(request) ?? HttpResponse.json(list(strategies));
+  }),
   http.get(`${api}/api/engine/v1/strategies/:family/:name/`, ({ params }) => {
     const strategy = strategies.find((item) => item.key === `${params.family}/${params.name}`);
     return strategy ? HttpResponse.json(strategy) : error("not_found", "Not found.", 404);
@@ -720,7 +757,9 @@ export const handlers = [
     const detail = strategyVersionDetails[`${params.family}/${params.name}:${params.version}`];
     return detail ? HttpResponse.json(detail) : error("not_found", "Not found.", 404);
   }),
-  http.get(`${api}/api/engine/v1/accounts/`, () => HttpResponse.json(list(accounts))),
+  http.get(`${api}/api/engine/v1/accounts/`, ({ request }) => {
+    return routeFailure(request) ?? HttpResponse.json(list(accounts));
+  }),
   http.get(`${api}/api/engine/v1/accounts/:id/`, ({ params }) => {
     const id = Number(params.id);
     const account = accounts.find((item) => item.id === id);
@@ -840,6 +879,8 @@ export const handlers = [
     return new HttpResponse(null, { status: 204 });
   }),
   http.get(`${api}/api/engine/v1/portfolio/summary/`, ({ request }) => {
+    const failed = routeFailure(request);
+    if (failed) return failed;
     // SPEC §7.4: live and paper are never summed together; the summary is per mode.
     const mode = new URL(request.url).searchParams.get("mode") ?? "live";
     const fixture = portfolioFixture();
@@ -852,8 +893,10 @@ export const handlers = [
       alerts: portfolio.alerts.filter((alert) => rows.some((system) => system.id === alert.system)),
     });
   }),
-  http.get(`${api}/api/engine/v1/portfolio/equity/`, () =>
-    HttpResponse.json({
+  http.get(`${api}/api/engine/v1/portfolio/equity/`, ({ request }) => {
+    const failed = routeFailure(request);
+    if (failed) return failed;
+    return HttpResponse.json({
       interval: "1h",
       buckets:
         portfolioFixture() === "empty"
@@ -867,9 +910,11 @@ export const handlers = [
                 allocation: ["12000"],
               },
             ],
-    }),
-  ),
+    });
+  }),
   http.get(`${api}/api/engine/v1/portfolio/trades/`, ({ request }) => {
+    const failed = routeFailure(request);
+    if (failed) return failed;
     const rows = portfolioFixture() === "empty" ? [] : fixtureTrades();
     const cursor = Number(new URL(request.url).searchParams.get("cursor") ?? "0");
     const start = Number.isFinite(cursor) ? cursor : 0;
@@ -934,6 +979,8 @@ export const handlers = [
     ),
   ),
   http.get(`${api}/api/engine/v1/systems/`, ({ request }) => {
+    const failed = routeFailure(request);
+    if (failed) return failed;
     const url = new URL(request.url);
     const filtered = fixtureSystems().filter(
       (system) =>
@@ -1205,6 +1252,8 @@ export const handlers = [
   }),
   http.get(`${api}/api/engine/v1/systems/:id/shadow-reports/`, () => HttpResponse.json(list([]))),
   http.get(`${api}/api/engine/v1/backtests/`, ({ request }) => {
+    const failed = routeFailure(request);
+    if (failed) return failed;
     const version = new URL(request.url).searchParams.get("version");
     const results =
       version === "1.1.0"

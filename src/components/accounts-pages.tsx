@@ -15,6 +15,7 @@ import {
   permissionExplanation,
 } from "@/lib/accounts";
 import { apiRequest, ApiError } from "@/lib/api/client";
+import { apiErrorMessage } from "@/lib/api/errors";
 import { queryKeys } from "@/lib/api/keys";
 import { useDeleteAccount, useUpdateAccount, useVerifyAccount } from "@/lib/api/mutations";
 import { useAccount, useAccountBalance, useAccounts, useVenues } from "@/lib/api/queries";
@@ -60,8 +61,7 @@ import {
 } from "@/components/ui/table";
 
 function actionError(error: unknown): string {
-  if (error instanceof ApiError && error.status === 429) return "Too many attempts, wait a minute.";
-  return error instanceof ApiError ? error.message : "Unable to complete the request.";
+  return apiErrorMessage(error);
 }
 
 function fieldMessages(error: unknown): Record<string, string> {

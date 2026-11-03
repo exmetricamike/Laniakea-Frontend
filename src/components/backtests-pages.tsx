@@ -7,6 +7,7 @@ import { useForm, useWatch } from "react-hook-form";
 import Decimal from "decimal.js-light";
 import { Copy, LoaderCircle } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
+import { apiErrorMessage } from "@/lib/api/errors";
 import { isDraftBacktestMode } from "@/lib/backtest-draft";
 import { useLiveChannel } from "@/lib/ws/socket";
 import { useCancelBacktest, useCreateBacktest } from "@/lib/api/mutations";
@@ -84,7 +85,7 @@ const metricRows = [
 ] as const;
 
 function errorMessage(error: unknown): string {
-  return error instanceof ApiError ? error.message : "Unable to complete the request.";
+  return apiErrorMessage(error);
 }
 
 function fieldMessages(error: unknown): Record<string, string> {
@@ -175,7 +176,14 @@ export function BacktestsPage() {
         </select>
       </div>
       {jobs.isLoading ? <Skeleton className="h-64" /> : null}
-      {jobs.error ? <p role="alert">{errorMessage(jobs.error)}</p> : null}
+      {jobs.error ? (
+        <div role="alert" className="space-y-3 rounded-md border border-red-500/40 p-4">
+          <p>{errorMessage(jobs.error)}</p>
+          <Button variant="outline" onClick={() => void jobs.refetch()}>
+            Retry
+          </Button>
+        </div>
+      ) : null}
       {!jobs.isLoading && rows.length === 0 ? (
         <Card>
           <CardContent className="p-6">No backtests yet.</CardContent>

@@ -39,6 +39,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ModeBadge } from "@/components/mode-badge";
 import { KillSwitchDialog } from "@/components/controls/kill-switch-dialog";
 import { ApiError } from "@/lib/api/client";
+import { apiErrorMessage } from "@/lib/api/errors";
 import { usePublishVersion, useUnpublishVersion } from "@/lib/api/mutations";
 import {
   useAuditLogInfinite,
@@ -61,7 +62,7 @@ function tabValue(value: string | null): TabValue {
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof ApiError ? error.message : "Unable to load operator data.";
+  return apiErrorMessage(error, "Unable to load operator data.");
 }
 
 function fieldMessages(error: unknown): string[] {

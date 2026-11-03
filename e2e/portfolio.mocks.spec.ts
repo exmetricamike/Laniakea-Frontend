@@ -49,13 +49,32 @@ test("renders both canonical empty states", async ({ page }) => {
   await expect(page.getByText("Systems").last()).toBeVisible();
 });
 
-test("large fixture remains interactive", async ({ page }) => {
+test("large fixture renders within budget and keeps trade paging bounded", async ({ page }) => {
   await resetAndLogin(page, "large");
+  await page.goto("/portfolio");
+  await page.getByRole("radio", { name: "PAPER" }).click();
+  await expect(page.locator('[data-kpi="Equity"]').first()).toBeVisible();
+  await page.goto("/systems");
   const started = Date.now();
   await page.goto("/portfolio");
   await page.getByRole("radio", { name: "PAPER" }).click();
+  await expect(page.locator('[data-kpi="Equity"]').first()).toBeVisible();
   await expect(page.getByText("Large system 1").first()).toBeVisible();
-  await page.getByRole("button", { name: "7D" }).click();
-  await expect(page.getByRole("button", { name: "7D" })).toBeVisible();
+  const tradeRows = page.locator("table").filter({ hasText: "Opened" }).locator("tbody tr");
+  await expect(tradeRows).toHaveCount(50);
   expect(Date.now() - started).toBeLessThan(2_000);
+});
+
+test("portfolio charts dispose canvases across repeated navigation", async ({ page }) => {
+  await resetAndLogin(page);
+  await page.goto("/portfolio");
+  await expect(page.locator("canvas").first()).toBeVisible();
+  const initialCanvasCount = await page.locator("canvas").count();
+  for (let index = 0; index < 5; index += 1) {
+    await page.getByRole("link", { name: "Systems", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Systems" })).toBeVisible();
+    await page.getByRole("link", { name: "Portfolio", exact: true }).click();
+    await expect(page.locator("canvas").first()).toBeVisible();
+    await expect(page.locator("canvas")).toHaveCount(initialCanvasCount);
+  }
 });

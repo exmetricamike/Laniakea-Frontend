@@ -11,6 +11,7 @@ import { SystemActions } from "@/components/controls/system-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -29,6 +30,7 @@ import {
   usePortfolioTradesInfinite,
   useSystemsInfinite,
 } from "@/lib/api/queries";
+import { apiErrorMessage } from "@/lib/api/errors";
 import type {
   JsonValue,
   PortfolioOrder,
@@ -56,7 +58,9 @@ function size(value: string | null | undefined): string {
 }
 
 function percent(value: number | null | undefined): string {
-  return value === null || value === undefined ? "—" : `${new Decimal(value).mul(100).toFixed(2)}%`;
+  return value === null || value === undefined
+    ? "—"
+    : `${new Decimal(value).mul(100).toFixed(2)}%`;
 }
 
 function localTime(value: string | null | undefined): string {
@@ -75,7 +79,8 @@ function stateBadge(state: SystemRow["state"]) {
 
 function tags(value: JsonValue[]): string {
   return (
-    value.map((item) => (typeof item === "string" ? item : JSON.stringify(item))).join(", ") || "—"
+    value.map((item) => (typeof item === "string" ? item : JSON.stringify(item))).join(", ") ||
+    "—"
   );
 }
 
@@ -189,7 +194,9 @@ function PortfolioSystemsTable({ rows }: { rows: SystemRow[] }) {
                 <TableCell>{percent(system.return)}</TableCell>
                 <TableCell>{money(system.period_pnl)}</TableCell>
                 <TableCell>
-                  {system.position ? `${system.position.side} ${size(system.position.size)}` : "—"}
+                  {system.position
+                    ? `${system.position.side} ${size(system.position.size)}`
+                    : "—"}
                 </TableCell>
                 <TableCell>{system.open_orders}</TableCell>
                 <TableCell>
@@ -204,6 +211,17 @@ function PortfolioSystemsTable({ rows }: { rows: SystemRow[] }) {
         </Table>
       </CardContent>
     </Card>
+  );
+}
+
+function SectionError({ error, retry }: { error: unknown; retry: () => void }) {
+  return (
+    <div role="alert" className="space-y-3 rounded-md border border-red-500/40 p-4">
+      <p>{apiErrorMessage(error, "Unable to load this portfolio section.")}</p>
+      <Button variant="outline" onClick={retry}>
+        Retry
+      </Button>
+    </div>
   );
 }
 
@@ -242,17 +260,22 @@ function BucketCards({
                 ) : null}
               </CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-x-5 gap-y-2 text-sm sm:grid-cols-3">
-              <Kpi label="Equity" value={money(bucket.value)} />
-              <Kpi label="Net PnL" value={`${money(bucket.net_pnl)} · ${percent(bucket.return)}`} />
-              <Kpi label="Period PnL" value={money(bucket.period_pnl)} />
-              <Kpi label="Realised" value={money(bucket.realised_pnl)} />
-              <Kpi label="Unrealised" value={money(bucket.unrealised_pnl)} />
-              <Kpi label="Fees" value={money(bucket.fees)} />
-              <Kpi label="Max drawdown" value={percent(bucket.max_drawdown)} />
-              <Kpi label="Systems running / total" value={`${running} / ${bucket.systems}`} />
-              <Kpi label="Open positions" value={String(bucket.open_positions)} />
-              <Kpi label="Open orders" value={String(bucket.open_orders)} />
+            <CardContent>
+              <dl className="grid grid-cols-2 gap-x-5 gap-y-2 text-sm sm:grid-cols-3">
+                <Kpi label="Equity" value={money(bucket.value)} />
+                <Kpi
+                  label="Net PnL"
+                  value={`${money(bucket.net_pnl)} · ${percent(bucket.return)}`}
+                />
+                <Kpi label="Period PnL" value={money(bucket.period_pnl)} />
+                <Kpi label="Realised" value={money(bucket.realised_pnl)} />
+                <Kpi label="Unrealised" value={money(bucket.unrealised_pnl)} />
+                <Kpi label="Fees" value={money(bucket.fees)} />
+                <Kpi label="Max drawdown" value={percent(bucket.max_drawdown)} />
+                <Kpi label="Systems running / total" value={`${running} / ${bucket.systems}`} />
+                <Kpi label="Open positions" value={String(bucket.open_positions)} />
+                <Kpi label="Open orders" value={String(bucket.open_orders)} />
+              </dl>
             </CardContent>
           </Card>
         );
@@ -300,13 +323,7 @@ export function PortfolioPage() {
   const initialLoading = allSystems.isLoading || modeSystems.isLoading || summary.isLoading;
   const noSystems = allSystems.data?.pages[0]?.results.length === 0;
   const noModeSystems = modeSystems.data?.pages[0]?.results.length === 0;
-  const error =
-    allSystems.error ??
-    modeSystems.error ??
-    summary.error ??
-    equity.error ??
-    orders.error ??
-    positions.error;
+  const listError = allSystems.error ?? modeSystems.error;
 
   function updateTradeFilter(name: "system" | "side" | "origin" | "status", value: string) {
     setTradeFilters((current) => ({ ...current, [name]: value }) as typeof current);
@@ -346,9 +363,14 @@ export function PortfolioPage() {
           Include stopped with PnL in period
         </label>
       </div>
-      {initialLoading ? <p aria-label="Loading portfolio">Loading…</p> : null}
-      {error ? <p role="alert">Unable to load portfolio.</p> : null}
-      {noSystems ? (
+      {initialLoading ? <Skeleton aria-label="Loading portfolio" className="h-32 w-full" /> : null}
+      {listError ? (
+        <SectionError error={listError} retry={() => void allSystems.refetch()} />
+      ) : null}
+      {!listError && summary.error ? (
+        <SectionError error={summary.error} retry={() => void summary.refetch()} />
+      ) : null}
+      {!listError && !summary.error && noSystems ? (
         <Card>
           <CardContent className="p-6">
             <p>No systems yet.</p>
@@ -358,7 +380,7 @@ export function PortfolioPage() {
           </CardContent>
         </Card>
       ) : null}
-      {!initialLoading && !noSystems && noModeSystems ? (
+      {!listError && !summary.error && !initialLoading && !noSystems && noModeSystems ? (
         <Card>
           <CardContent className="p-6">
             <p>{mode === "live" ? "No live systems — switch to PAPER" : "No paper systems"}</p>
@@ -374,12 +396,22 @@ export function PortfolioPage() {
           </CardContent>
         </Card>
       ) : null}
-      {!initialLoading && !noSystems && !noModeSystems && systems.length === 0 ? (
+      {!listError &&
+      !summary.error &&
+      !initialLoading &&
+      !noSystems &&
+      !noModeSystems &&
+      systems.length === 0 ? (
         <Card>
           <CardContent className="p-6">No portfolio rows for these options.</CardContent>
         </Card>
       ) : null}
-      {!initialLoading && !noSystems && !noModeSystems && systems.length > 0 ? (
+      {!listError &&
+      !summary.error &&
+      !initialLoading &&
+      !noSystems &&
+      !noModeSystems &&
+      systems.length > 0 ? (
         <>
           {summary.data?.alerts.length ? (
             <div role="alert" className="space-y-2">
@@ -397,17 +429,47 @@ export function PortfolioPage() {
               ))}
             </div>
           ) : null}
-          <BucketCards buckets={buckets} rows={systems} />
+          {summary.isLoading ? (
+            <Skeleton aria-label="Loading portfolio KPIs" className="h-72 w-full" />
+          ) : buckets.length === 0 ? (
+            <Card>
+              <CardContent className="p-6">No portfolio KPI data for these options.</CardContent>
+            </Card>
+          ) : (
+            <BucketCards buckets={buckets} rows={systems} />
+          )}
           <div className="grid gap-4 xl:grid-cols-2">
-            {buckets.map((bucket) => (
-              <EquityChart
-                key={bucket.currency}
-                data={equity.data?.buckets.find((item) => item.currency === bucket.currency)}
-                controls={<span className="text-sm">{bucket.currency}</span>}
-              />
-            ))}
+            {equity.error ? (
+              <SectionError error={equity.error} retry={() => void equity.refetch()} />
+            ) : equity.isLoading ? (
+              <Skeleton aria-label="Loading portfolio equity" className="h-80 w-full" />
+            ) : buckets.length === 0 ? (
+              <Card>
+                <CardContent className="p-6">
+                  No portfolio equity data for these options.
+                </CardContent>
+              </Card>
+            ) : (
+              buckets.map((bucket) => (
+                <EquityChart
+                  key={bucket.currency}
+                  data={equity.data?.buckets.find((item) => item.currency === bucket.currency)}
+                  controls={<span className="text-sm">{bucket.currency}</span>}
+                />
+              ))
+            )}
           </div>
-          <PortfolioSystemsTable rows={systems} />
+          {modeSystems.error ? (
+            <SectionError error={modeSystems.error} retry={() => void modeSystems.refetch()} />
+          ) : modeSystems.isLoading ? (
+            <Skeleton aria-label="Loading portfolio systems" className="h-64 w-full" />
+          ) : systems.length === 0 ? (
+            <Card>
+              <CardContent className="p-6">No systems match these portfolio options.</CardContent>
+            </Card>
+          ) : (
+            <PortfolioSystemsTable rows={systems} />
+          )}
           <Card>
             <CardHeader>
               <CardTitle>Trades</CardTitle>
@@ -461,7 +523,15 @@ export function PortfolioPage() {
               </div>
             </CardHeader>
             <CardContent className="overflow-auto">
-              <TradeTable rows={tradeRows} />
+              {trades.error ? (
+                <SectionError error={trades.error} retry={() => void trades.refetch()} />
+              ) : trades.isLoading ? (
+                <Skeleton aria-label="Loading portfolio trades" className="h-64 w-full" />
+              ) : tradeRows.length === 0 ? (
+                <p>No trades match these filters.</p>
+              ) : (
+                <TradeTable rows={tradeRows} />
+              )}
               {trades.hasNextPage ? (
                 <Button
                   className="mt-3"

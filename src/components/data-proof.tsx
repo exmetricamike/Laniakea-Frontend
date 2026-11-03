@@ -1,6 +1,6 @@
 "use client";
 
-import { ApiError } from "@/lib/api/client";
+import { apiErrorMessage } from "@/lib/api/errors";
 
 export function DataProof({
   loading,
@@ -17,7 +17,7 @@ export function DataProof({
 }) {
   if (loading ?? isLoading) return <p aria-label="Loading data">Loading…</p>;
   if (error) {
-    const message = error instanceof ApiError ? error.message : "Unable to load data";
+    const message = apiErrorMessage(error, "Unable to load data");
     return (
       <div role="alert">
         <p>{message}</p>
