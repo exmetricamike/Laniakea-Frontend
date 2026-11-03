@@ -10,9 +10,9 @@ export default defineConfig({
   use: { baseURL: "http://localhost:3001", headless: true, trace: "retain-on-failure" },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: "npm run dev",
+    command: "npm run build && npm run start",
     url: "http://localhost:3001/login",
     reuseExistingServer: true,
-    timeout: 120_000,
+    timeout: 300_000,
   },
 });

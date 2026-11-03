@@ -2,9 +2,31 @@
 
 Frontend scaffold for the Laniakea trading engine. It requires Node.js 20+ and the Django backend at `http://localhost:8000` for real sign-in.
 
-1. Copy `.env.local.example` to `.env.local` to configure the API, WebSocket, and mock mode.
-2. Dependencies are provisioned; do not install packages in this workspace.
-3. Start the app with `npm run dev` and open `http://localhost:3001/login`.
+## Run against the local backend
+
+Prerequisites: Node.js 20+, dependencies already provisioned in this checkout, and the backend
+started separately with `scripts/dev-up.sh start`. Seed the isolated browser-test tenant once with
+`scripts/dev-up.sh seed-e2e` in the backend repository.
+
+Copy `.env.local.example` to `.env.local` and set the local API and WebSocket keys:
+
+```dotenv
+NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_WS_URL=ws://localhost:8000
+NEXT_PUBLIC_USE_MOCKS=false
+```
+
+Build and serve the frontend:
+
+```sh
+npm run build && npm run start
+```
+
+For a fresh clone only, install the lockfile dependencies with `npm ci`; that step requires registry
+access. The real-backend Playwright smoke test uses `E2E_EMAIL` and `E2E_PASSWORD`, defaulting to
+`e2e@local.test` and `Laniakea-e2e-1`.
+
+For mock-focused development, set `NEXT_PUBLIC_USE_MOCKS=true` and use `npm run dev`.
 
 Checks:
 
