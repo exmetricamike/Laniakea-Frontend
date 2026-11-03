@@ -20,6 +20,7 @@ import type {
   Health,
   AuditLogRow,
   OperatorStrategy,
+  OperatorStrategyVersionDetail,
   OperatorSystem,
   PaginatedList,
   PortfolioSummary,
@@ -535,6 +536,23 @@ export function useOperatorStrategies(options: { enabled?: boolean } = {}) {
     queryKey: queryKeys.operator.strategies(),
     enabled: options.enabled ?? true,
     queryFn: () => api.get<PaginatedList<OperatorStrategy>>("/api/engine/v1/operator/strategies/"),
+  });
+}
+export function useOperatorStrategyVersion(
+  key: string,
+  version: string,
+  options: { enabled?: boolean } = {},
+) {
+  return useQuery({
+    queryKey: queryKeys.operator.strategyVersion(key, version),
+    retry: false,
+    enabled: Boolean(key && version) && (options.enabled ?? true),
+    queryFn: () => {
+      const [family, name] = key.split("/", 2);
+      return api.get<OperatorStrategyVersionDetail>(
+        `/api/engine/v1/operator/strategies/${encodeURIComponent(family)}/${encodeURIComponent(name)}/versions/${encodeURIComponent(version)}/`,
+      );
+    },
   });
 }
 export function useAuditLogInfinite(

@@ -375,11 +375,20 @@ function StrategyCard({
               {version.code_revision || "No code revision"}
             </span>
             {version.status === "draft" ? (
-              <PublishDialog
-                strategy={strategy}
-                version={version.version}
-                onForbidden={onForbidden}
-              />
+              <>
+                <Button asChild size="sm" variant="outline">
+                  <Link
+                    href={`/backtests/new?strategy=${encodeURIComponent(strategy.key)}&version=${encodeURIComponent(version.version)}`}
+                  >
+                    Run backtest
+                  </Link>
+                </Button>
+                <PublishDialog
+                  strategy={strategy}
+                  version={version.version}
+                  onForbidden={onForbidden}
+                />
+              </>
             ) : null}
             {version.status === "published" ? (
               <UnpublishButton

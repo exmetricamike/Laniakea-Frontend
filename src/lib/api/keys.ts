@@ -49,6 +49,8 @@ export const queryKeys = {
   operator: {
     systems: (filters: object) => ["operator", "systems", filters] as const,
     strategies: () => ["operator", "strategies"] as const,
+    strategyVersion: (key: string, version: string) =>
+      ["operator", "strategies", key, "versions", version] as const,
     auditLog: (filters: object) => ["operator", "audit-log", filters] as const,
     health: () => ["operator", "health"] as const,
   },

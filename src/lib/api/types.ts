@@ -132,6 +132,20 @@ export type OperatorStrategy = {
   title: string;
   versions: OperatorStrategyVersion[];
 };
+export type OperatorStrategyVersionDetail = {
+  key: string;
+  version: string;
+  title: string;
+  description_md: string;
+  instrument_kinds: string[];
+  recommended_timeframes: string[];
+  warmup_bars: number;
+  params_schema: ParamsSchema | null;
+  default_params: Record<string, JsonValue> | null;
+  meta: StrategyMeta;
+  published_at: string | null;
+  status: "draft" | "published" | "unpublished";
+};
 export type OperatorPublishedVersion = {
   key: string;
   version: string;

@@ -457,6 +457,7 @@ type MockBacktestState = {
 };
 
 const backtestStates = new Map<number, MockBacktestState>();
+const backtestVersions = new Map<number, string>();
 const backtestTimers = new Set<ReturnType<typeof setTimeout>>();
 
 function emitBacktestProgress(id: number, status: BacktestStatus, progress: number): void {
@@ -500,8 +501,9 @@ function queuedBacktest(id: number): Record<string, unknown> {
   const state = backtestStates.get(id) ?? { status: "queued", progress: 0, scheduled: false };
   backtestStates.set(id, state);
   scheduleBacktest(id);
-  if (state.status === "done") return { ...backtestJob, id };
-  return { ...backtestJob, id, status: state.status, progress: state.progress, metrics: null };
+  const job = { ...backtestJob, id, version: backtestVersions.get(id) ?? backtestJob.version };
+  if (state.status === "done") return job;
+  return { ...job, status: state.status, progress: state.progress, metrics: null };
 }
 
 function error(code: string, message: string, status: number) {
@@ -533,6 +535,7 @@ export function resetAccountMocks(): void {
   hideOperatorEvidence = false;
   health = structuredClone(initialHealth);
   backtestStates.clear();
+  backtestVersions.clear();
   backtestTimers.forEach((timer) => clearTimeout(timer));
   backtestTimers.clear();
   systemRows = structuredClone(systems);
@@ -1282,6 +1285,35 @@ export const handlers = [
     const denied = operatorError(request);
     return denied ?? HttpResponse.json(list(operatorStrategies));
   }),
+  http.get(
+    `${api}/api/engine/v1/operator/strategies/:family/:name/versions/:version/`,
+    ({ request, params }) => {
+      if (params.version === "403") return error("permission_denied", "Permission denied.", 403);
+      const denied = operatorError(request);
+      if (denied) return denied;
+      if (params.family !== "atr_strategies" || params.name !== "atr_allocation" || params.version === "404")
+        return error("not_found", "Not found.", 404);
+      const status = params.version === "1.0.0" ? "published" : "draft";
+      return HttpResponse.json({
+        ...operatorVersionResponse,
+        version: String(params.version),
+        status,
+        published_at: status === "published" ? "2026-10-22T10:00:00Z" : null,
+        params_schema: {
+          type: "object",
+          properties: {
+            trailing_atr_period: {
+              type: "integer",
+              minimum: 1,
+              default: 13,
+              description: "Draft ATR lookback period.",
+            },
+          },
+        },
+        default_params: { trailing_atr_period: 13 },
+      });
+    },
+  ),
   http.get(`${api}/api/engine/v1/audit-log/`, ({ request }) => {
     const denied = operatorError(request);
     if (denied) return denied;
@@ -1523,7 +1555,21 @@ export const handlers = [
     const body = (await request.clone().json()) as {
       instrument?: number;
       cost_model?: { instrument_kind?: string };
+      version?: string;
     };
+    if (body.version === "stale") {
+      return HttpResponse.json(
+        {
+          error: {
+            code: "validation_error",
+            message: "Invalid request.",
+            fields: { version: ["This draft is no longer the latest version."] },
+            reasons: [],
+          },
+        },
+        { status: 400 },
+      );
+    }
     if (body.cost_model?.instrument_kind === "linear_perp") {
       return HttpResponse.json(
         {
@@ -1537,10 +1583,17 @@ export const handlers = [
         { status: 400 },
       );
     }
-    const response = { ...backtestJob, id: 3, status: "queued" as const, progress: 0 };
+    const response = {
+      ...backtestJob,
+      id: 3,
+      version: body.version ?? backtestJob.version,
+      status: "queued" as const,
+      progress: 0,
+    };
     const cached = await idempotent(request, response);
     if (cached) return cached;
     backtestStates.set(3, { status: "queued", progress: 0, scheduled: false });
+    backtestVersions.set(3, response.version);
     scheduleBacktest(3);
     return HttpResponse.json(response, { status: 201 });
   }),

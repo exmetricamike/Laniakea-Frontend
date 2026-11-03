@@ -7,6 +7,7 @@ import { useForm, useWatch } from "react-hook-form";
 import Decimal from "decimal.js-light";
 import { Copy, LoaderCircle } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
+import { isDraftBacktestMode } from "@/lib/backtest-draft";
 import { useLiveChannel } from "@/lib/ws/socket";
 import { useCancelBacktest, useCreateBacktest } from "@/lib/api/mutations";
 import {
@@ -17,6 +18,8 @@ import {
   useBacktestTrades,
   useBacktestsInfinite,
   useInstruments,
+  useMe,
+  useOperatorStrategyVersion,
   useStrategies,
   useStrategyVersion,
   useVenues,
@@ -242,13 +245,30 @@ type FormValues = {
   params: Record<string, string | number | boolean | null>;
 };
 
+function DraftBacktestError({ message }: { message: string }) {
+  return (
+    <div className="max-w-2xl space-y-4" role="alert">
+      <h1 className="text-2xl font-semibold">New backtest</h1>
+      <p>{message}</p>
+      <Link className="underline" href="/operator?tab=strategies">
+        Back to operator strategies
+      </Link>
+    </div>
+  );
+}
+
 export function NewBacktestPage() {
   const router = useRouter();
   const search = useSearchParams();
+  const requestedStrategy = search.get("strategy") ?? "";
+  const requestedVersion = search.get("version") ?? "";
+  const me = useMe();
+  const draftRequested = Boolean(requestedStrategy && requestedVersion);
+  const draftMode = me.isSuccess && isDraftBacktestMode(me.data.is_staff, requestedStrategy, requestedVersion);
   const strategies = useStrategies();
   const form = useForm<FormValues>({
     defaultValues: {
-      strategy: search.get("strategy") ?? "",
+      strategy: requestedStrategy,
       venue: "binance",
       kind: "spot",
       instrument: "",
@@ -272,8 +292,14 @@ export function NewBacktestPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const selected =
     strategies.data?.results.find((strategy) => strategy.key === strategyKey) ?? null;
-  const version = selected?.latest_version.version ?? null;
-  const detail = useStrategyVersion(strategyKey, version);
+  const normalVersion = selected?.latest_version.version ?? null;
+  const operatorDetail = useOperatorStrategyVersion(requestedStrategy, requestedVersion, {
+    enabled: draftMode,
+  });
+  const version = draftMode ? requestedVersion : normalVersion;
+  const detail = useStrategyVersion(draftMode ? "" : strategyKey, draftMode ? null : normalVersion);
+  const strategy = draftMode ? operatorDetail.data : selected;
+  const versionDetail = draftMode ? operatorDetail.data : detail.data;
   const venues = useVenues();
   const instruments = useInstruments({
     venue,
@@ -284,10 +310,11 @@ export function NewBacktestPage() {
   const chosen = instruments.data?.results.find((item) => item.id === Number(instrumentId));
   const mutation = useCreateBacktest();
   const [error, setError] = useState("");
-  const unsupported = Object.entries(detail.data?.params_schema?.properties ?? {}).some(
+  const [versionError, setVersionError] = useState("");
+  const unsupported = Object.entries(versionDetail?.params_schema?.properties ?? {}).some(
     ([name, value]) =>
       !supportedProperty(value) &&
-      detail.data?.default_params?.[name] === undefined &&
+      versionDetail?.default_params?.[name] === undefined &&
       value.default === undefined,
   );
   const compatibleVenues = venues.data?.results.filter((item) => item.kinds.includes(kind)) ?? [];
@@ -302,21 +329,22 @@ export function NewBacktestPage() {
     if (selectedVenue && selectedVenue !== venue) form.setValue("venue", selectedVenue);
   }, [form, selectedVenue, venue]);
   useEffect(() => {
-    if (selected) {
-      form.setValue("kind", selected.instrument_kinds[0] ?? "spot");
+    if (strategy) {
+      form.setValue("kind", strategy.instrument_kinds[0] ?? "spot");
       form.setValue("timeframe", "");
       form.setValue("instrument", "");
       form.reset({
         ...form.getValues(),
-        params: (detail.data?.default_params ?? {}) as Record<
+        params: (versionDetail?.default_params ?? {}) as Record<
           string,
           string | number | boolean | null
         >,
       });
     }
-  }, [selected?.key, detail.data?.version]);
+  }, [form, strategy, versionDetail]);
   async function submit(values: FormValues) {
     setError("");
+    setVersionError("");
     const start = `${values.start}T00:00:00Z`;
     const end = `${values.end}T00:00:00Z`;
     const split = values.in_sample_end ? `${values.in_sample_end}T00:00:00Z` : undefined;
@@ -354,8 +382,9 @@ export function NewBacktestPage() {
       router.push(`/backtests/${job.id}`);
     } catch (reason) {
       const fields = fieldMessages(reason);
+      setVersionError(fields.version ?? "");
       Object.entries(fields).forEach(([name, message]) =>
-        form.setError(name as keyof FormValues, { message }),
+        name === "version" ? undefined : form.setError(name as keyof FormValues, { message }),
       );
       setError(errorMessage(reason));
     }
@@ -363,44 +392,64 @@ export function NewBacktestPage() {
   const timeframes = Array.isArray(chosen?.timeframes)
     ? chosen.timeframes.filter(
         (item): item is string =>
-          typeof item === "string" && Boolean(selected?.recommended_timeframes.includes(item)),
+          typeof item === "string" && Boolean(strategy?.recommended_timeframes.includes(item)),
       )
     : [];
+  if (draftRequested && me.isPending) {
+    return <Skeleton className="h-96 max-w-2xl" />;
+  }
+  if (draftMode && operatorDetail.isLoading) {
+    return <Skeleton className="h-96 max-w-2xl" />;
+  }
+  if (draftMode && operatorDetail.error) {
+    return <DraftBacktestError message={errorMessage(operatorDetail.error)} />;
+  }
+  if (draftMode && operatorDetail.data?.status !== "draft") {
+    return <DraftBacktestError message="This strategy version is not a draft." />;
+  }
   return (
     <div className="max-w-2xl space-y-6">
       <h1 className="text-2xl font-semibold">New backtest</h1>
       <Card>
         <CardContent className="p-6">
           <form className="space-y-5" onSubmit={form.handleSubmit(submit)}>
-            <div>
-              <Label htmlFor="strategy">Strategy</Label>
-              <Select
-                value={strategyKey}
-                onValueChange={(value) => form.setValue("strategy", value)}
-              >
-                <SelectTrigger id="strategy">
-                  <SelectValue placeholder="Choose strategy" />
-                </SelectTrigger>
-                <SelectContent>
-                  {strategies.data?.results
-                    .filter((item) => item.latest_version.published_at)
-                    .map((item) => (
-                      <SelectItem key={item.key} value={item.key}>
-                        {item.title}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {selected ? (
+            {draftMode ? (
+              <div>
+                <Label>Strategy</Label>
+                <p>{strategy?.title}</p>
+              </div>
+            ) : (
+              <div>
+                <Label htmlFor="strategy">Strategy</Label>
+                <Select
+                  value={strategyKey}
+                  onValueChange={(value) => form.setValue("strategy", value)}
+                >
+                  <SelectTrigger id="strategy">
+                    <SelectValue placeholder="Choose strategy" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {strategies.data?.results
+                      .filter((item) => item.latest_version.published_at)
+                      .map((item) => (
+                        <SelectItem key={item.key} value={item.key}>
+                          {item.title}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {strategy ? (
               <p>
-                Version: <code>{version}</code>
+                Version: <code>{version}</code>{draftMode ? " (draft)" : ""}
+                {versionError ? <span role="alert"> {versionError}</span> : null}
               </p>
             ) : null}
             <SchemaForm
-              schema={detail.data?.params_schema}
+              schema={versionDetail?.params_schema}
               defaults={
-                (detail.data?.default_params ?? {}) as Record<
+                (versionDetail?.default_params ?? {}) as Record<
                   string,
                   string | number | boolean | null
                 >
@@ -432,7 +481,7 @@ export function NewBacktestPage() {
                   <SelectValue placeholder="Choose kind" />
                 </SelectTrigger>
                 <SelectContent>
-                  {selected?.instrument_kinds.map((item) => (
+                  {strategy?.instrument_kinds.map((item) => (
                     <SelectItem key={item} value={item}>
                       {item}
                     </SelectItem>
@@ -536,7 +585,7 @@ export function NewBacktestPage() {
             <p>Instrument kind: {chosen?.kind ?? kind}</p>
             <p>Leverage: 1</p>
             {error ? <p role="alert">{error}</p> : null}
-            <Button type="submit" disabled={mutation.isPending || unsupported || !selected}>
+            <Button type="submit" disabled={mutation.isPending || unsupported || !strategy}>
               {mutation.isPending ? <LoaderCircle className="animate-spin" /> : null} Create
               backtest
             </Button>

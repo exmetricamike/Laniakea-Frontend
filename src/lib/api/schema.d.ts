@@ -324,6 +324,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/engine/v1/operator/strategies/{family}/{name}/versions/{version}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["engine_operator_strategy_version"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/engine/v1/operator/strategies/{family}/{name}/versions/{version}/unpublish/": {
         parameters: {
             query?: never;
@@ -1042,19 +1058,27 @@ export interface components {
         OperatorStrategyVersion: {
             readonly version: string;
             readonly code_revision: string;
-            readonly status: components["schemas"]["OperatorStrategyVersionStatusEnum"];
+            readonly status: components["schemas"]["StatusC83Enum"];
             /** Format: date-time */
             readonly published_at: string | null;
             /** Format: date-time */
             readonly unpublished_at: string | null;
         };
-        /**
-         * @description * `draft` - draft
-         *     * `published` - published
-         *     * `unpublished` - unpublished
-         * @enum {string}
-         */
-        OperatorStrategyVersionStatusEnum: "draft" | "published" | "unpublished";
+        OperatorStrategyVersionDetail: {
+            key: string;
+            version: string;
+            title: string;
+            description_md: string;
+            instrument_kinds: unknown;
+            recommended_timeframes: unknown;
+            warmup_bars: number;
+            params_schema?: unknown;
+            default_params?: unknown;
+            meta?: unknown;
+            /** Format: date-time */
+            published_at?: string | null;
+            readonly status: components["schemas"]["StatusC83Enum"];
+        };
         /** @description Read serializer backed by the reusable systems row builder. */
         OperatorSystem: {
             readonly id: number;
@@ -1231,6 +1255,13 @@ export interface components {
          * @enum {string}
          */
         SideEnum: "buy" | "sell";
+        /**
+         * @description * `draft` - draft
+         *     * `published` - published
+         *     * `unpublished` - unpublished
+         * @enum {string}
+         */
+        StatusC83Enum: "draft" | "published" | "unpublished";
         /** @description Read serializer backed by the reusable systems row builder. */
         System: {
             readonly id: number;
@@ -1880,6 +1911,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Version"];
+                };
+            };
+        };
+    };
+    engine_operator_strategy_version: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                family: string;
+                name: string;
+                version: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorStrategyVersionDetail"];
                 };
             };
         };
